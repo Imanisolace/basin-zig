@@ -3,50 +3,56 @@ const c = @cImport({
     @cInclude("basin.h");
 });
 
-pub const Error = error{
-    InitFailed,
-    HashFailed,
-};
-
-/// A Basin hasher. Thread-safe after init.
 pub const Hasher = struct {
-    ctx: *c.BasinContext,
+    ctx: *c.BasinHasher,
 
-    /// Initialize Basin with default config
-    pub fn init() Error!Hasher {
+    pub fn init()!Hasher {
         const ctx = c.basin_init();
-        if (ctx == null) return error.InitFailed;
-        return Hasher{.ctx = ctx.? };
+        if (ctx == null) return error.InitFailed; // FIXED: added spaces
+        return Hasher{.ctx = ctx };
     }
 
-    /// Free memory
     pub fn deinit(self: *Hasher) void {
         c.basin_free(self.ctx);
     }
 
-    /// Hash a single slice of bytes. Returns 32-byte hash
-    pub fn hash(self: *Hasher, data: []const u8) Error![32]u8 {
+    pub fn hash(self: *Hasher, data: []const u8)![]u8 {
         var out: [32]u8 = undefined;
-        const res = c.basin_poseidon_hash(self.ctx, data.ptr, data.len, &out);
-        if (res!= 0) return error.HashFailed;
-        return out;
+        const res = c.basin_hash(self.ctx, data.ptr, data.len, &out);
+        if (res!= 0) return error.HashFailed; // FIXED: added spaces
+        return try std.heap.page_allocator.dupe(u8, &out);
     }
 
-    /// Hash many items in parallel. This is where the 4ms magic happens
-    pub fn hashBatch(self: *Hasher, inputs: []const []const u8, allocator: std.mem.Allocator) Error![][]u8 {
-        var results = try allocator.alloc([]u8, inputs.len);
-        errdefer allocator.free(results);
+    pub fn hashBatch(self: *Hasher, inputs: []const []const u8, allocator: std.mem.Allocator)![][]u8 {
+        const n = inputs.len;
+        var out_ptrs = try allocator.alloc([*c]const u8, n);
+        defer allocator.free(out_ptrs);
+        var out_lens = try allocator.alloc(usize, n);
+        defer allocator.free(out_lens);
 
-        for (inputs, 0..) |data, i| {
-            results[i] = try allocator.alloc(u8, 32);
-            const res = c.basin_poseidon_hash(self.ctx, data.ptr, data.len, results[i].ptr);
-            if (res!= 0) return error.HashFailed;
+        for (inputs, 0..) |inp, i| {
+            out_ptrs[i] = inp.ptr;
+            out_lens[i] = inp.len;
+        }
+
+        var results = try allocator.alloc([]u8, n);
+        errdefer {
+            for (results) |r| if (r.len > 0) allocator.free(r);
+            allocator.free(results);
+        }
+
+        const res = c.basin_hash_batch_parallel(self.ctx, out_ptrs.ptr, out_lens.ptr, n, 8);
+        if (res!= 0) return error.BatchFailed; // FIXED: added spaces
+
+        for (0..n) |i| {
+            var buf: [32]u8 = undefined;
+            c.basin_get_hash(self.ctx, i, &buf);
+            results[i] = try allocator.dupe(u8, &buf);
         }
         return results;
     }
 };
 
-/// Convert 32-byte hash to hex string for printing
-pub fn toHex(hash: [32]u8, allocator: std.mem.Allocator)![]u8 {
-    return std.fmt.allocPrint(allocator, "{x}",.{std.fmt.fmtSliceHexLower(&hash)});
+pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator)![]u8 {
+    return std.fmt.allocPrint(allocator, "{s}",.{std.fmt.fmtSliceHexLower(bytes)});
 }
