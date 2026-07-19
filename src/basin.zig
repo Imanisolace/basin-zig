@@ -26,7 +26,7 @@ pub fn deinit() void {
 }
 
 pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    const out = try allocator.alloc(u8, 32);
+    const out = try allocator.alloc(u8, 16); // 128-bit = 16 bytes
     errdefer allocator.free(out);
     if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
         return error.HashFailed;
