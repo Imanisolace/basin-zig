@@ -1,53 +1,46 @@
 const std = @import("std");
-
-const c = @cImport({
-    @cInclude("basin.h");
-});
+const basin = @import("basin");
 
 pub fn main()!void {
-    const stdout = std.io.getStdOut().writer();
+    const stdout = std.stdout.writer();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    var cfg = c.BasinConfig{
-       .width = 512,
-       .height = 512, 
-       .channels = 3,
-    };
-    const init_res = c.basin_init(&cfg);
-    if (init_res == 0) {} else {
-        try stdout.print("Failed to init Basin\n",.{});
-        return error.InitFailed;
-    }
-    defer c.basin_free();
+    try stdout.print("=== Basin Zig v0.1.0 ===\n", .{});
+    try stdout.print("High-Speed Poseidon Hashing\n\n", .{});
 
-    const input = "basin benchmark data";
-    var output: [32]u8 = undefined;
+    // Init hasher
+    var hasher = try basin.Hasher.init();
+    defer hasher.deinit();
 
-    _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
+    // 1. Single hash demo
+    const data = "basin benchmark data";
+    const hash = try hasher.hash(data);
+    const hex = try basin.toHex(hash, allocator);
+    defer allocator.free(hex);
+    try stdout.print("Input: {s}\n", .{data});
+    try stdout.print("Single hash: {s}\n\n", .{hex});
 
-    const t1 = std.time.milliTimestamp();
-    _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
-    const t2 = std.time.milliTimestamp();
-    const single_ms = t2 - t1;
+    // 2. The flex: Parallel batch
+    const N = 8000;
+    var inputs = try allocator.alloc([]const u8, N);
+    defer allocator.free(inputs);
+    for (inputs) |*i| i.* = data;
 
-    const t3 = std.time.milliTimestamp();
-    const ret = c.basin_parallel_process(input.ptr, input.len, 8);
-    const t4 = std.time.milliTimestamp();
-    const parallel_ms = t4 - t3;
-
-    if (ret == 0) {} else {
-        try stdout.print("Parallel process failed\n",.{});
-        return error.ParallelFailed;
-    }
-
-    try stdout.print("=== Basin Benchmark ===\n",.{});
-    try stdout.print("Input: {s}\n",.{input});
-    try stdout.print("Single hash: {d}ms\n",.{single_ms});
-    try stdout.print("Parallel 8 threads, 8000 hashes: {d}ms\n",.{parallel_ms});
+    try stdout.print("Running {d} hashes on 8 threads...\n", .{N});
+    const start = std.time.milliTimestamp();
     
-    try stdout.print("Sample Hash: ",.{});
-    for (output) |b| {
-        try stdout.print("{x:0>2}",.{b});
+    const hashes = try hasher.hashBatch(inputs, allocator);
+    defer {
+        for (hashes) |h| allocator.free(h);
+        allocator.free(hashes);
     }
-    try stdout.print("\n",.{});
-    try stdout.print("Success!\n",.{});
+    
+    const elapsed = std.time.milliTimestamp() - start;
+    const throughput = N * 1000 / @max(elapsed, 1);
+
+    try stdout.print("Parallel 8 threads, {d} hashes: {d}ms\n", .{ N, elapsed });
+    try stdout.print("Throughput: ~{d} hashes/sec\n", .{throughput});
+    try stdout.print("\nSuccess! Basin is ready.\n", .{});
 }
