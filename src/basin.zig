@@ -10,11 +10,12 @@ pub const BasinConfig = struct {
 };
 
 pub fn init(cfg: BasinConfig)!void {
-    const res = c.basin_init(&c.BasinConfig{
-       .width = cfg.width,
-       .height = cfg.height,
-       .channels = cfg.channels,
-    });
+    var c_cfg = c.BasinConfig{ // <- var not const
+     .width = cfg.width,
+     .height = cfg.height,
+     .channels = cfg.channels,
+    };
+    const res = c.basin_init(&c_cfg);
     if (res != 0) return error.InitFailed;
 }
 
