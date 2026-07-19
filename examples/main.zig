@@ -2,42 +2,35 @@ const std = @import("std");
 const basin = @import("basin");
 
 pub fn main()!void {
-    const stdout = std.io.getStdOut().writer(); // FIX 1
+    const stdout = std.io.getStdOut().writer();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     try stdout.print("=== Basin Zig v0.1.0 ===\n",.{});
-    try stdout.print("High-Speed Poseidon Hashing\n\n",.{});
+    try stdout.print("High-Speed Poseidon Hashing\n",.{});
 
-    var hasher = try basin.Hasher.init();
-    defer hasher.deinit();
+    // Init with config - match your C API
+    try basin.init(.{.width = 256,.height = 256,.channels = 3 });
+    defer basin.deinit();
 
     const data = "basin benchmark data";
-    const hash = try hasher.hash(data);
+
+    // Single hash
+    const hash = try basin.poseidonHash(data, allocator);
+    defer allocator.free(hash);
     const hex = try basin.toHex(hash, allocator);
     defer allocator.free(hex);
+
     try stdout.print("Input: {s}\n",.{data});
     try stdout.print("Single hash: {s}\n\n",.{hex});
 
-    const N = 8000;
-    const inputs = try allocator.alloc([]const u8, N);
-    defer allocator.free(inputs);
-    for (inputs) |*i| i.* = data;
-
-    try stdout.print("Running {d} hashes on 8 threads...\n",.{N});
+    // Parallel test
+    try stdout.print("Running parallel test with 8 threads...\n",.{});
     const start = std.time.milliTimestamp();
-
-    const hashes = try hasher.hashBatch(inputs, allocator);
-    defer {
-        for (hashes) |h| allocator.free(h);
-        allocator.free(hashes);
-    }
-
+    try basin.parallelProcess(data, 8);
     const elapsed = std.time.milliTimestamp() - start;
-    const throughput = N * 1000 / @max(elapsed, 1);
 
-    try stdout.print("Parallel 8 threads, {d} hashes: {d}ms\n",.{ N, elapsed });
-    try stdout.print("Throughput: ~{d} hashes/sec\n",.{throughput});
+    try stdout.print("Parallel 8 threads: {d}ms\n",.{elapsed});
     try stdout.print("\nSuccess! Basin is ready.\n",.{});
 }
