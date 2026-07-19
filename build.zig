@@ -4,50 +4,46 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Build the C library
-    const basin_lib = b.addStaticLibrary(.{
+    // 1. Build the static library: libbasin.a
+    const lib = b.addStaticLibrary(.{
         .name = "basin",
         .target = target,
         .optimize = optimize,
     });
-
-    basin_lib.addIncludePath(b.path("include"));
-    basin_lib.addCSourceFiles(.{
+    lib.addCSourceFiles(.{
         .files = &.{
-            "src/basin_init.c",
-            "src/basin_config.c", 
-            "src/basin_poseidon.c",
-            "src/basin_parallel.c",
+            "src/basin.c", // <-- change this to your actual .c files
         },
-        .flags = &.{ "-O3", "-Wall", "-std=c11" },
+        .flags = &.{},
     });
-    basin_lib.linkLibC();
-    b.installArtifact(basin_lib);
+    lib.addIncludePath(b.path("include"));
+    lib.linkLibC();
+    b.installArtifact(lib);
 
-    // Example executable
-    const example = b.addExecutable(.{
+    // 2. Build the example executable
+    const exe = b.addExecutable(.{
         .name = "basin_example",
+        .root_source_file = b.path("examples/main.zig"), // Only listed ONCE
         .target = target,
         .optimize = optimize,
     });
-    example.addIncludePath(b.path("include"));
-    example.addCSourceFile(.{ .file = b.path("examples/main.zig") });
-    example.linkLibrary(basin_lib);
-    example.linkLibC();
-    b.installArtifact(example);
+    exe.addIncludePath(b.path("include"));
+    exe.linkLibrary(lib); // Link our static lib
+    exe.linkLibC();
+    b.installArtifact(exe);
 
-    // Test runner
-    const tests = b.addExecutable(.{
-        .name = "basin_tests",
-        .root_source_file = b.path("tests/run.zig"),
+    // 3. Make `zig build run` work
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    const run_step = b.step("run", "Run the example");
+    run_step.dependOn(&run_cmd.step);
+
+    // 4. Make `zig build test` work
+    const test_step = b.step("test", "Run tests");
+    const lib_tests = b.addTest(.{
+        .root_source_file = b.path("src/basin.zig"), // <-- change if you have tests
         .target = target,
         .optimize = optimize,
     });
-    tests.addIncludePath(b.path("include"));
-    tests.linkLibrary(basin_lib);
-    tests.linkLibC();
-    
-    const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run all tests");
-    test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&b.addRunArtifact(lib_tests).step);
 }
