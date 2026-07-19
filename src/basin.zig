@@ -44,3 +44,9 @@ pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator) ![]u8 {
     }
     return out;
 }
+
+pub fn parallelProcess(data: []const u8, threads: i32) !void {
+    if (c.basin_parallel_process(data.ptr, data.len, threads) != 0) {
+        return error.ParallelFailed;
+    }
+}
