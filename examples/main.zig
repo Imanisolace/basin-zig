@@ -2,7 +2,7 @@ const std = @import("std");
 const basin = @import("basin");
 
 pub fn main()!void {
-    const stdout = std.stdout.writer();
+    const stdout = std.io.getStdOut().writer(); // FIX 1
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -10,11 +10,9 @@ pub fn main()!void {
     try stdout.print("=== Basin Zig v0.1.0 ===\n",.{});
     try stdout.print("High-Speed Poseidon Hashing\n\n",.{});
 
-    // Init hasher
     var hasher = try basin.Hasher.init();
     defer hasher.deinit();
 
-    // 1. Single hash demo
     const data = "basin benchmark data";
     const hash = try hasher.hash(data);
     const hex = try basin.toHex(hash, allocator);
@@ -22,9 +20,8 @@ pub fn main()!void {
     try stdout.print("Input: {s}\n",.{data});
     try stdout.print("Single hash: {s}\n\n",.{hex});
 
-    // 2. The flex: Parallel batch
     const N = 8000;
-    const inputs = try allocator.alloc([]const u8, N); // CHANGED: var -> const
+    const inputs = try allocator.alloc([]const u8, N);
     defer allocator.free(inputs);
     for (inputs) |*i| i.* = data;
 
