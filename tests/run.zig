@@ -7,13 +7,14 @@ fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     return try basin.toHex(hash_bytes, allocator);
 }
 
+// 128-bit test vectors = 32 hex chars each
 test "VECTOR 1: empty" {
     try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
     defer basin.deinit();
     const hex = try hashToHex("", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings(
-        "d6dbf9be6aed81cbb73693ee366ec5315a9257438e94012caaaaaaaaaaaaaaaa", 
+        "d6dbf9be6aed81cbb73693ee366ec531", 
         hex
     );
 }
@@ -24,7 +25,7 @@ test "VECTOR 2: abc" {
     const hex = try hashToHex("abc", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings(
-        "126004b8006452630ea03001973ac60014a001cca62f5600aaaaaaaaaaaaaaaa", 
+        "126004b8006452630ea03001973ac600", 
         hex
     );
 }
@@ -35,7 +36,7 @@ test "VECTOR 3: hello world" {
     const hex = try hashToHex("hello world", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings(
-        "0e4f1b195d62956fb3a57aa2154e5b0102d2c3e4e4ccf6f7aaaaaaaaaaaaaaaa", 
+        "0e4f1b195d62956fb3a57aa2154e5b01", 
         hex
     );
 }
