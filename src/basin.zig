@@ -19,7 +19,7 @@ pub const Hasher = struct {
     pub fn hash(self: *Hasher, data: []const u8)![]u8 {
         var out: [32]u8 = undefined;
         const res = c.basin_hash(self.ctx, data.ptr, data.len, &out);
-        if (res!= 0) return error.HashFailed;
+        if (res != 0) return error.HashFailed;
         return try std.heap.page_allocator.dupe(u8, &out);
     }
 
