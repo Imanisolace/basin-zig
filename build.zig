@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // 1. Build the static library: libbasin.a
+    // 1. Build the static library: libbasin.a from your 4 C files
     const lib = b.addStaticLibrary(.{
         .name = "basin",
         .target = target,
@@ -12,7 +12,10 @@ pub fn build(b: *std.Build) void {
     });
     lib.addCSourceFiles(.{
         .files = &.{
-            "src/basin.c", // <-- change this to your actual .c files
+            "src/basin_config.c",
+            "src/basin_init.c", 
+            "src/basin_parallel.c",
+            "src/basin_poseidon.c",
         },
         .flags = &.{},
     });
@@ -23,27 +26,18 @@ pub fn build(b: *std.Build) void {
     // 2. Build the example executable
     const exe = b.addExecutable(.{
         .name = "basin_example",
-        .root_source_file = b.path("examples/main.zig"), // Only listed ONCE
+        .root_source_file = b.path("examples/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.addIncludePath(b.path("include"));
-    exe.linkLibrary(lib); // Link our static lib
+    exe.linkLibrary(lib); // Link libbasin.a
     exe.linkLibC();
     b.installArtifact(exe);
 
-    // 3. Make `zig build run` work
+    // 3. zig build run
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     const run_step = b.step("run", "Run the example");
     run_step.dependOn(&run_cmd.step);
-
-    // 4. Make `zig build test` work
-    const test_step = b.step("test", "Run tests");
-    const lib_tests = b.addTest(.{
-        .root_source_file = b.path("src/basin.zig"), // <-- change if you have tests
-        .target = target,
-        .optimize = optimize,
-    });
-    test_step.dependOn(&b.addRunArtifact(lib_tests).step);
 }
