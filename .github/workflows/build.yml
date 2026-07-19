@@ -12,11 +12,8 @@ jobs:
         with:
           version: 0.13.0
 
-      - name: Clean zig cache
-        run: rm -rf.zig-cache zig-out || true
-
       - name: Build
-        run: zig build
+        run: zig build -freference-trace
 
       - name: Run
         run: zig build run
