@@ -1,6 +1,5 @@
 const std = @import("std");
 
-// Import the C header
 const c = @cImport({
     @cInclude("basin.h");
 });
@@ -8,13 +7,13 @@ const c = @cImport({
 pub fn main()!void {
     const stdout = std.io.getStdOut().writer();
 
-    // 1. Init Basin
     var cfg = c.BasinConfig{
-      .width = 512,
-      .height = 512, 
-      .channels = 3,
+       .width = 512,
+       .height = 512, 
+       .channels = 3,
     };
-    if (c.basin_init(&cfg)!= 0) {
+    const init_res = c.basin_init(&cfg);
+    if (init_res == 0) {} else {
         try stdout.print("Failed to init Basin\n",.{});
         return error.InitFailed;
     }
@@ -23,27 +22,23 @@ pub fn main()!void {
     const input = "basin benchmark data";
     var output: [32]u8 = undefined;
 
-    // Warmup 1 hash
     _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
 
-    // 2. Benchmark: 1 single hash
     const t1 = std.time.milliTimestamp();
     _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
     const t2 = std.time.milliTimestamp();
     const single_ms = t2 - t1;
 
-    // 3. Benchmark: 8000 hashes with 8 threads
     const t3 = std.time.milliTimestamp();
     const ret = c.basin_parallel_process(input.ptr, input.len, 8);
     const t4 = std.time.milliTimestamp();
     const parallel_ms = t4 - t3;
 
-    if (ret!= 0) {
+    if (ret == 0) {} else {
         try stdout.print("Parallel process failed\n",.{});
         return error.ParallelFailed;
     }
 
-    // 4. Print results
     try stdout.print("=== Basin Benchmark ===\n",.{});
     try stdout.print("Input: {s}\n",.{input});
     try stdout.print("Single hash: {d}ms\n",.{single_ms});
