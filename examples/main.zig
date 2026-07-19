@@ -1,4 +1,4 @@
-const std = @import("std");
+const std = @import("std")
 const basin = @import("basin");
 
 pub fn main()!void {
