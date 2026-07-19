@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     });
 
     // Let C code find basin.h
-    lib.addIncludePath("include"); // <- FIXED: no .path
+    lib.addIncludePath(b.path("include")); // <- use b.path()
 
     // Add all your C source files
     lib.addCSourceFiles(.{
@@ -29,12 +29,12 @@ pub fn build(b: *std.Build) void {
 
     // Test executable that links the C lib
     const lib_unit_tests = b.addTest(.{
-       .root_source_file = "src/basin.zig", // <- FIXED: no .path
+       .root_source_file = b.path("src/basin.zig"), // <- use b.path()
        .target = target,
        .optimize = optimize,
     });
 
-    lib_unit_tests.addIncludePath("include"); // <- FIXED
+    lib_unit_tests.addIncludePath(b.path("include")); // <- use b.path()
     lib_unit_tests.linkLibrary(lib);
     lib_unit_tests.linkLibC(); // important for C
 
