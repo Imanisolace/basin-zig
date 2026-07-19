@@ -15,7 +15,7 @@ pub fn init(cfg: BasinConfig)!void {
        .height = cfg.height,
        .channels = cfg.channels,
     });
-    if (res!= 0) return error.InitFailed;
+    if (res != 0) return error.InitFailed;
 }
 
 pub fn deinit() void {
@@ -25,13 +25,13 @@ pub fn deinit() void {
 pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     var out: [32]u8 = undefined;
     const res = c.basin_poseidon_hash(input.ptr, input.len, &out);
-    if (res!= 0) return error.HashFailed;
+    if (res != 0) return error.HashFailed;
     return try allocator.dupe(u8, &out);
 }
 
 pub fn parallelProcess(data: []const u8, threads: i32)!void {
     const res = c.basin_parallel_process(data.ptr, data.len, threads);
-    if (res!= 0) return error.ParallelFailed;
+    if (res != 0) return error.ParallelFailed;
 }
 
 pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator)![]u8 {
