@@ -42,7 +42,7 @@ pub const Hasher = struct {
         }
 
         const res = c.basin_hash_batch_parallel(self.ctx, out_ptrs.ptr, out_lens.ptr, n, 8);
-        if (res!= 0) return error.BatchFailed;
+        if (res != 0) return error.BatchFailed;
 
         for (0..n) |i| {
             var buf: [32]u8 = undefined;
