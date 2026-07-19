@@ -16,7 +16,9 @@ pub fn init(cfg: BasinConfig) !void {
         .height = cfg.height,
         .channels = cfg.channels,
     };
-    if (c.basin_init(&c_cfg) != 0) {
+    const ret = c.basin_init(&c_cfg);
+    std.debug.print("basin_init returned: {}\n", .{ret}); // ADD THIS
+    if (ret != 0) {
         return error.InitFailed;
     }
 }
@@ -26,9 +28,11 @@ pub fn deinit() void {
 }
 
 pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    const out = try allocator.alloc(u8, 16); // 128-bit = 16 bytes
+    const out = try allocator.alloc(u8, 16);
     errdefer allocator.free(out);
-    if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
+    const ret = c.basin_poseidon_hash(input.ptr, input.len, out.ptr); // CHECK THIS TOO
+    std.debug.print("basin_poseidon_hash returned: {}\n", .{ret}); // ADD THIS
+    if (ret != 0) {
         return error.HashFailed;
     }
     return out;
