@@ -7,33 +7,35 @@ fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     return try basin.toHex(hash_bytes, allocator);
 }
 
+// Init once for the whole test suite
+test {
+    try basin.init(.{ .width = 3, .height = 1, .channels = 1 });
+}
+
+// Deinit once at the end
+test {
+    basin.deinit();
+}
+
 test "VECTOR 1: empty" {
-    try basin.init(.{ .width = 3, .height = 1, .channels = 1 }); // WAS 1,1,1
-    defer basin.deinit();
     const hex = try hashToHex("", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings("d6dbf9be6aed81cbb73693ee366ec531", hex);
 }
 
 test "VECTOR 2: abc" {
-    try basin.init(.{ .width = 3, .height = 1, .channels = 1 });
-    defer basin.deinit();
     const hex = try hashToHex("abc", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings("126004b8006452630ea03001973ac600", hex);
 }
 
 test "VECTOR 3: hello world" {
-    try basin.init(.{ .width = 3, .height = 1, .channels = 1 });
-    defer basin.deinit();
     const hex = try hashToHex("hello world", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     try std.testing.expectEqualStrings("0e4f1b195d62956fb3a57aa2154e5b01", hex);
 }
 
 test "PROP: deterministic" {
-    try basin.init(.{ .width = 3, .height = 1, .channels = 1 });
-    defer basin.deinit();
     const h1 = try hashToHex("deterministic", std.testing.allocator);
     defer std.testing.allocator.free(h1);
     const h2 = try hashToHex("deterministic", std.testing.allocator);
