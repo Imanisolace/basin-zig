@@ -8,7 +8,7 @@ pub const Hasher = struct {
 
     pub fn init()!Hasher {
         const ctx = c.basin_init();
-        if (ctx == null) return error.InitFailed; // FIXED: added spaces
+        if (ctx == null) return error.InitFailed;
         return Hasher{.ctx = ctx };
     }
 
@@ -19,7 +19,7 @@ pub const Hasher = struct {
     pub fn hash(self: *Hasher, data: []const u8)![]u8 {
         var out: [32]u8 = undefined;
         const res = c.basin_hash(self.ctx, data.ptr, data.len, &out);
-        if (res!= 0) return error.HashFailed; // FIXED: added spaces
+        if (res!= 0) return error.HashFailed;
         return try std.heap.page_allocator.dupe(u8, &out);
     }
 
@@ -42,7 +42,7 @@ pub const Hasher = struct {
         }
 
         const res = c.basin_hash_batch_parallel(self.ctx, out_ptrs.ptr, out_lens.ptr, n, 8);
-        if (res!= 0) return error.BatchFailed; // FIXED: added spaces
+        if (res!= 0) return error.BatchFailed;
 
         for (0..n) |i| {
             var buf: [32]u8 = undefined;
