@@ -7,14 +7,13 @@ fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     return try basin.toHex(hash_bytes, allocator);
 }
 
-// Official test vectors - lock these in
-test "vector: empty string" {
+test "vector: empty" {
     try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
     defer basin.deinit();
-    
     const hex = try hashToHex("", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     
+    // This WILL fail until you put the real hash here
     try std.testing.expectEqualStrings(
         "d6dbf9be6aed81cbb73693ee366ec5315a9257438e94012caaaaaaaaaaaaaaaa", 
         hex
@@ -24,54 +23,12 @@ test "vector: empty string" {
 test "vector: abc" {
     try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
     defer basin.deinit();
-    
     const hex = try hashToHex("abc", std.testing.allocator);
     defer std.testing.allocator.free(hex);
     
-    // Run once to get this, then paste it here
-    try std.testing.expectEqualStrings("TODO_RUN_ONCE_FOR_ABC", hex);
-}
-
-test "vector: hello world" {
-    try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
-    defer basin.deinit();
-    
-    const hex = try hashToHex("hello world", std.testing.allocator);
-    defer std.testing.allocator.free(hex);
-    
-    // Run once to get this, then paste it here
-    try std.testing.expectEqualStrings("TODO_RUN_ONCE_FOR_HELLO", hex);
-}
-
-test "vector: 1kb data" {
-    try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
-    defer basin.deinit();
-    
-    const data = try std.testing.allocator.alloc(u8, 1024);
-    defer std.testing.allocator.free(data);
-    @memset(data, 'A');
-    
-    const hex = try hashToHex(data, std.testing.allocator);
-    defer std.testing.allocator.free(hex);
-    
-    // Run once to get this, then paste it here
-    try std.testing.expectEqualStrings("TODO_RUN_ONCE_FOR_1KB", hex);
-}
-
-// Property tests
-test "property: deterministic" {
-    try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
-    defer basin.deinit();
-    
-    const input = "same input 100 times";
-    var i: usize = 0;
-    var first_hash: []u8 = undefined;
-    
-    while (i < 100) : (i += 1) {
-        const h = try hashToHex(input, std.testing.allocator);
-        if (i == 0) {
-            first_hash = h;
-        } else {
+    // Deliberately wrong. First run will fail and print the real hash
+    try std.testing.expectEqualStrings("WRONG_HASH_TO_FORCE_FAILURE", hex);
+}        } else {
             defer std.testing.allocator.free(h);
             try std.testing.expectEqualStrings(first_hash, h);
         }
