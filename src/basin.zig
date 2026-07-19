@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const c = @cImport({
-    @cInclude("basin.h"); // ONLY THIS ONE
+    @cInclude("basin.h");
 });
 
 pub const BasinConfig = struct {
@@ -11,24 +11,26 @@ pub const BasinConfig = struct {
 };
 
 pub fn init(cfg: BasinConfig) !void {
-    const c_cfg = c.basin_config_t{
+    var c_cfg = c.BasinConfig{
         .width = cfg.width,
         .height = cfg.height,
         .channels = cfg.channels,
     };
-    if (c.basin_init(c_cfg) != 0) {
+    if (c.basin_init(&c_cfg) != 0) {
         return error.InitFailed;
     }
 }
 
 pub fn deinit() void {
-    c.basin_deinit();
+    c.basin_free();
 }
 
 pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const out = try allocator.alloc(u8, 32);
     errdefer allocator.free(out);
-    c.basin_poseidon_hash(input.ptr, input.len, out.ptr);
+    if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
+        return error.HashFailed;
+    }
     return out;
 }
 
