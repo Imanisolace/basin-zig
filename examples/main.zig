@@ -31,7 +31,7 @@ pub fn main()!void {
     try stdout.print("Running {d} hashes on 8 threads...\n", .{N});
     const start = std.time.milliTimestamp();
     
-    const hashes = try hasher.hashBatch(inputs, allocator);
+    const hashes = try hasher.hashBatch(inputs, allocator); // <- changed var to const
     defer {
         for (hashes) |h| allocator.free(h);
         allocator.free(hashes);
