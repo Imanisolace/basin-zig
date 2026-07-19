@@ -35,9 +35,23 @@ pub fn build(b: *std.Build) void {
     exe.linkLibC();
     b.installArtifact(exe);
 
-    // 3. zig build run
+    // 3. Run step: zig build run
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     const run_step = b.step("run", "Run the example");
     run_step.dependOn(&run_cmd.step);
+
+    // 4. Test step: zig build test
+    const test_step = b.step("test", "Run unit tests");
+    
+    const lib_tests = b.addTest(.{
+        .root_source_file = b.path("src/basin.zig"), // <-- this is the file with 1+1 tests
+        .target = target,
+        .optimize = optimize,
+    });
+    lib_tests.addIncludePath(b.path("include"));
+    lib_tests.linkLibrary(lib); // Link the C lib so tests can call C functions later
+    lib_tests.linkLibC();
+
+    test_step.dependOn(&b.addRunArtifact(lib_tests).step);
 }
