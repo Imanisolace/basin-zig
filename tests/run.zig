@@ -7,7 +7,6 @@ fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     return try basin.toHex(hash_bytes, allocator);
 }
 
-// LOCKED TEST VECTORS
 test "VECTOR 1: empty" {
     try basin.init(.{ .width = 1, .height = 1, .channels = 1 });
     defer basin.deinit();
