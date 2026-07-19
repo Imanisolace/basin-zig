@@ -1,52 +1,48 @@
 const std = @import("std");
 
-const c = @cImport({
-    @cInclude("basin.h");
-});
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-pub fn main()!void {
-    const stdout = std.io.getStdOut().writer();
+    const lib = b.addStaticLibrary(.{
+        .name = "basin",
+        .target = target,
+        .optimize = optimize,
+    });
+    lib.addCSourceFiles(.{
+        .files = &.{
+            "src/basin_config.c",
+            "src/basin_init.c", 
+            "src/basin_poseidon.c",
+            "src/basin_parallel.c",
+        },
+    });
+    lib.addIncludePath(b.path("include"));
+    lib.linkLibC();
+    lib.linkSystemLibrary("pthread");
+    b.installArtifact(lib);
 
-    var cfg = c.BasinConfig{
-       .width = 512,
-       .height = 512, 
-       .channels = 3,
-    };
-    if (c.basin_init(&cfg)!= 0) { // <-- FIXED: spaces around!=
-        try stdout.print("Failed to init Basin\n",.{});
-        return error.InitFailed;
-    }
-    defer c.basin_free();
+    // Tests
+    const tests = b.addTest(.{
+        .root_source_file = b.path("src/basin.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tests.addIncludePath(b.path("include"));
+    tests.linkLibrary(lib);
+    const run_tests = b.addRunArtifact(tests);
+    b.step("test", "Run tests").dependOn(&run_tests.step);
 
-    const input = "basin benchmark data";
-    var output: [32]u8 = undefined;
-
-    _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
-
-    const t1 = std.time.milliTimestamp();
-    _ = c.basin_poseidon_hash(input.ptr, input.len, &output);
-    const t2 = std.time.milliTimestamp();
-    const single_ms = t2 - t1;
-
-    const t3 = std.time.milliTimestamp();
-    const ret = c.basin_parallel_process(input.ptr, input.len, 8);
-    const t4 = std.time.milliTimestamp();
-    const parallel_ms = t4 - t3;
-
-    if (ret!= 0) { // <-- FIXED: spaces around!=
-        try stdout.print("Parallel process failed\n",.{});
-        return error.ParallelFailed;
-    }
-
-    try stdout.print("=== Basin Benchmark ===\n",.{});
-    try stdout.print("Input: {s}\n",.{input});
-    try stdout.print("Single hash: {d}ms\n",.{single_ms});
-    try stdout.print("Parallel 8 threads, 8000 hashes: {d}ms\n",.{parallel_ms});
-    
-    try stdout.print("Sample Hash: ",.{});
-    for (output) |b| {
-        try stdout.print("{x:0>2}",.{b});
-    }
-    try stdout.print("\n",.{});
-    try stdout.print("Success!\n",.{});
+    // Example
+    const example = b.addExecutable(.{
+        .name = "basin_example",
+        .root_source_file = b.path("examples/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    example.addIncludePath(b.path("include"));
+    example.linkLibrary(lib);
+    b.installArtifact(example);
+    const run_example = b.addRunArtifact(example);
+    b.step("run", "Run example").dependOn(&run_example.step);
 }
