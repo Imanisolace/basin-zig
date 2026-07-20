@@ -120,7 +120,6 @@ test "CONCURRENT: thread safety" {
             fn worker()!void {
                 const hex = hashToHex("concurrent", allocator) catch return;
                 defer allocator.free(hex);
-                _ = hex;
             }
         }.worker,.{});
     }
