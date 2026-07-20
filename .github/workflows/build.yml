@@ -65,7 +65,10 @@ jobs:
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
-      - name: Build ReleaseFast
+      - name: Build Test Binary ReleaseFast
+        run: zig build test -Doptimize=ReleaseFast
+
+      - name: Build Example Binary ReleaseFast  
         run: zig build -Doptimize=ReleaseFast
 
       - name: Valgrind Test Runner
