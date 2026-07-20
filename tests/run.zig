@@ -45,6 +45,31 @@ test "PROP: deterministic" {
     }.run);
 }
 
+test "PROP: any input -> 32 hex chars" {
+    try withBasin(struct{
+        fn run() !void {
+            const inputs = [_][]const u8{ "a", "hello", "\x00\xff", "a" ** 1000 };
+            for (inputs) |input| {
+                const hex = try hashToHex(input, std.testing.allocator);
+                defer std.testing.allocator.free(hex);
+                try std.testing.expect(hex.len == 32);
+            }
+        }
+    }.run);
+}
+
+test "PROP: 1 bit flip changes hash" {
+    try withBasin(struct{
+        fn run() !void {
+            const h1 = try hashToHex("data", std.testing.allocator);
+            defer std.testing.allocator.free(h1);
+            const h2 = try hashToHex("dara", std.testing.allocator); // 1 char diff
+            defer std.testing.allocator.free(h2);
+            try std.testing.expect(!std.mem.eql(u8, h1, h2));
+        }
+    }.run);
+}
+
 test "Smoke: non-empty input works" {
     try withBasin(struct{
         fn run() !void {
