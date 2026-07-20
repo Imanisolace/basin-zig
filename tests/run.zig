@@ -42,7 +42,8 @@ test "PROP: deterministic" {
 
 test "PROP: any input -> 32 hex chars" {
     try withBasin(struct{ fn run() !void {
-        const inputs = [_][]const u8{ "a", "hello", "\x00\xff", "a" ** 1000 };
+        const null_bytes = &[_]u8{0, 0xff};
+        const inputs = [_][]const u8{ "a", "hello", null_bytes, "a" ** 1000 };
         for (inputs) |input| {
             const hex = try hashToHex(input, std.testing.allocator);
             defer std.testing.allocator.free(hex);
@@ -79,4 +80,24 @@ test "STRESS: parallelProcess is thread-safe" {
     }
     fn worker(iterations: usize) !void {
         var i: usize = 0;
-        while (i < iterations) : (i += 1) try basin.parallelProcess("stress
+        while (i < iterations) : (i += 1) try basin.parallelProcess("stress test data", 4);
+    }}.run);
+}
+
+test "PROP: empty input returns error" {
+    try withBasin(struct{ fn run() !void {
+        const result = hashToHex("", std.testing.allocator);
+        try std.testing.expectError(BasinError.EmptyInput, result);
+    }}.run);
+}
+
+test "PROP: large input does not overflow" {
+    try withBasin(struct{ fn run() !void {
+        const big = try std.testing.allocator.alloc(u8, 1024 * 1024);
+        defer std.testing.allocator.free(big);
+        @memset(big, 'A');
+        const hex = try hashToHex(big, std.testing.allocator);
+        defer std.testing.allocator.free(hex);
+        try std.testing.expect(hex.len == 32);
+    }}.run);
+}
