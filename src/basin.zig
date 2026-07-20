@@ -28,7 +28,7 @@ pub fn init(cfg: BasinConfig)!void {
        .channels = cfg.channels,
     };
 
-    if (c.basin_init(&c_cfg)!= 0) {
+    if (c.basin_init(&c_cfg) != 0) {
         return BasinError.InitFailed;
     }
 }
