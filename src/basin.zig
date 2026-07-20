@@ -18,7 +18,7 @@ pub const BasinConfig = struct {
 };
 
 pub fn init(cfg: BasinConfig) !void {
-    // Basic validation since C side doesn't check
+    // Guard against bad C input
     if (cfg.width == 0 or cfg.height == 0 or cfg.channels == 0) {
         return BasinError.InvalidConfig;
     }
@@ -28,7 +28,7 @@ pub fn init(cfg: BasinConfig) !void {
         .height = cfg.height,
         .channels = cfg.channels,
     };
-    
+
     if (c.basin_init(&c_cfg) != 0) {
         return BasinError.InitFailed;
     }
@@ -40,16 +40,16 @@ pub fn deinit() void {
 
 pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (input.len == 0) {
-        return BasinError.EmptyInput; // C lib returns zeros for empty, so we guard it
+        return BasinError.EmptyInput;
     }
 
-    const out = try allocator.alloc(u8, 16); // 16 bytes = 128 bit
+    const out = try allocator.alloc(u8, 32); // 32 bytes = 256 bit Poseidon
     errdefer allocator.free(out);
 
     if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
         return BasinError.HashFailed;
     }
-    
+
     return out;
 }
 
@@ -57,7 +57,7 @@ pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const hex_chars = "0123456789abcdef";
     const out = try allocator.alloc(u8, bytes.len * 2);
     errdefer allocator.free(out);
-    
+
     for (bytes, 0..) |b, i| {
         out[i * 2] = hex_chars[b >> 4];
         out[i * 2 + 1] = hex_chars[b & 0x0F];
@@ -68,7 +68,7 @@ pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator) ![]u8 {
 pub fn parallelProcess(data: []const u8, threads: i32) !void {
     if (data.len == 0) return BasinError.EmptyInput;
     if (threads <= 0) return BasinError.InvalidConfig;
-    
+
     if (c.basin_parallel_process(data.ptr, data.len, threads) != 0) {
         return BasinError.ParallelFailed;
     }
