@@ -4,8 +4,10 @@ const BasinError = basin.BasinError;
 
 fn hashToHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const hash_bytes = try basin.poseidonHash(input, allocator);
-    defer allocator.free(hash_bytes);
-    return try basin.toHex(hash_bytes, allocator);
+    errdefer allocator.free(hash_bytes); // free on error
+    const hex = try basin.toHex(hash_bytes, allocator);
+    allocator.free(hash_bytes); // free on success
+    return hex;
 }
 
 fn withBasin(comptime f: fn() anyerror!void) !void {
@@ -129,8 +131,8 @@ fn concurrentWorker(iterations: usize) !void {
     var i: usize = 0;
     while (i < iterations) : (i += 1) {
         basin.init(.{ .width = 3, .height = 1, .channels = 1 }) catch continue;
-        _ = hashToHex("concurrent", std.testing.allocator) catch {};
-        basin.deinit();
+        defer basin.deinit(); // ensure deinit even on error
+        _ = hashToHex("concurrent", std.testing.allocator) catch continue;
     }
 }
 
