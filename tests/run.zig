@@ -63,7 +63,7 @@ test "PROP: 1 bit flip changes hash" {
         fn run() !void {
             const h1 = try hashToHex("data", std.testing.allocator);
             defer std.testing.allocator.free(h1);
-            const h2 = try hashToHex("dara", std.testing.allocator); // 1 char diff
+            const h2 = try hashToHex("dara", std.testing.allocator);
             defer std.testing.allocator.free(h2);
             try std.testing.expect(!std.mem.eql(u8, h1, h2));
         }
@@ -127,7 +127,10 @@ test "PROP: large input does not overflow" {
 test "PROP: allocator failure is handled" {
     try withBasin(struct{
         fn run() !void {
-            var fail = std.testing.FailingAllocator.init(std.testing.allocator, 0);
+            var fail = std.testing.FailingAllocator.init(
+                std.testing.allocator,
+                .{ .fail_at_allocation = 0 },
+            );
             const result = hashToHex("test", fail.allocator());
             try std.testing.expectError(error.OutOfMemory, result);
         }
