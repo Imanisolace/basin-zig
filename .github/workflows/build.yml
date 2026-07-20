@@ -12,5 +12,8 @@ jobs:
         run: zig build --summary all
       - name: Run Tests
         run: zig build test --summary all
-      - name: Run Example
-        run: zig build run -- --bench --threads 4 "ci run" > /dev/null 2>&1 || true
+      - name: Run Example Single
+        run: zig build run -- "ci run" # this MUST pass
+      - name: Run Example Bench/Threads
+        run: zig build run -- --bench --threads 4 "ci run" 2>&1 | cat
+        continue-on-error: true # yellow instead of red
