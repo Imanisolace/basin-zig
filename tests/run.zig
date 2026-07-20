@@ -14,7 +14,7 @@ fn withBasin(comptime f: fn() anyerror!void) !void {
     try f();
 }
 
-test "VECTOR 2: abc" {
+test "VECTOR 1: abc" {
     try withBasin(struct{ fn run() !void {
         const hex = try hashToHex("abc", std.testing.allocator);
         defer std.testing.allocator.free(hex);
@@ -22,7 +22,7 @@ test "VECTOR 2: abc" {
     }}.run);
 }
 
-test "VECTOR 3: hello world" {
+test "VECTOR 2: hello world" {
     try withBasin(struct{ fn run() !void {
         const hex = try hashToHex("hello world", std.testing.allocator);
         defer std.testing.allocator.free(hex);
@@ -97,6 +97,47 @@ test "PROP: large input does not overflow" {
         defer std.testing.allocator.free(big);
         @memset(big, 'A');
         const hex = try hashToHex(big, std.testing.allocator);
+        defer std.testing.allocator.free(hex);
+        try std.testing.expect(hex.len == 32);
+    }}.run);
+}
+
+test "PROP: different init configs give different hashes" {
+    try basin.init(.{ .width = 3, .height = 1, .channels = 1 });
+    defer basin.deinit();
+    const h1 = try hashToHex("seed", std.testing.allocator);
+    defer std.testing.allocator.free(h1);
+
+    try basin.init(.{ .width = 5, .height = 1, .channels = 1 });
+    defer basin.deinit();
+    const h2 = try hashToHex("seed", std.testing.allocator);
+    defer std.testing.allocator.free(h2);
+
+    try std.testing.expect(!std.mem.eql(u8, h1, h2));
+}
+
+test "PROP: concurrent init/deinit is safe" {
+    const Thread = std.Thread;
+    const thread_count = 8;
+    var threads: [thread_count]Thread = undefined;
+    for (&threads) |*t| {
+        t.* = try Thread.spawn(.{}, concurrentWorker, .{20});
+    }
+    for (threads) |t| t.join();
+}
+fn concurrentWorker(iterations: usize) !void {
+    var i: usize = 0;
+    while (i < iterations) : (i += 1) {
+        basin.init(.{ .width = 3, .height = 1, .channels = 1 }) catch continue;
+        _ = hashToHex("concurrent", std.testing.allocator) catch {};
+        basin.deinit();
+    }
+}
+
+test "PROP: binary data with nulls is handled" {
+    try withBasin(struct{ fn run() !void {
+        const bin = &[_]u8{ 0, 1, 2, 255, 0, 0, 127 };
+        const hex = try hashToHex(bin, std.testing.allocator);
         defer std.testing.allocator.free(hex);
         try std.testing.expect(hex.len == 32);
     }}.run);
