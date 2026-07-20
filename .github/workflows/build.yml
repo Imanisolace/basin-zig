@@ -8,5 +8,9 @@ jobs:
       - uses: mlugg/setup-zig@v1
         with:
           version: 0.13.0
-      - run: zig build
-      - run: zig build test
+      - name: Build
+        run: zig build --summary all
+      - name: Run Tests
+        run: zig build test --summary all
+      - name: Run Example
+        run: zig run examples/main.zig -- "ci run" --bench --threads 4
