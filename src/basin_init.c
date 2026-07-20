@@ -9,7 +9,7 @@ int basin_init(BasinConfig* cfg) {
     if (!cfg) return -1;
     
     memcpy(&g_cfg, cfg, sizeof(BasinConfig));
-    g_initialized = 1;
+    g_initialized = 1
     return 0;
 }
 
