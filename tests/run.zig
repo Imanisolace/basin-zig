@@ -1,4 +1,4 @@
-const std = @import("std")
+const std = @import("std");
 const basin = @import("basin");
 const prng = std.Random.DefaultPrng;
 
