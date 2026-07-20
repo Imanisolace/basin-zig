@@ -9,22 +9,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Zig
+      - name: Setup Zig 0.13.0
         uses: mlugg/setup-zig@v1
         with:
           version: 0.13.0
 
-      - name: Zig Version
-        run: zig version
-
       - name: Build
         run: zig build --summary all
 
-      - name: Run Tests
+      - name: Test
         run: zig build test --summary all
 
-      - name: Run Example Single
+      - name: Run Example
         run: zig build run -- "ci run"
 
-      - name: Run Example Bench + Threads
-        run: zig build run --bench --threads 4 "ci run"
+      - name: Run Bench + Threads
+        run: zig build run -- --bench --threads 4 "ci run"
