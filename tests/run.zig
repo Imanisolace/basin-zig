@@ -1,7 +1,7 @@
 const std = @import("std");
 const basin = @import("basin");
 
-fn withBasin(test_fn: fn()!void)!void {
+fn withBasin(test_fn: fn () anyerror!void)!void {
     try basin.init(.{.width = 256,.height = 256,.channels = 3 });
     defer basin.deinit();
     try test_fn();
