@@ -118,7 +118,9 @@ test "CONCURRENT: thread safety" {
     for (&threads) |*t| {
         t.* = try std.Thread.spawn(.{}, struct {
             fn worker()!void {
-                _ = hashToHex("concurrent", allocator) catch return;
+                const hex = hashToHex("concurrent", allocator) catch return;
+                defer allocator.free(hex);
+                _ = hex;
             }
         }.worker,.{});
     }
