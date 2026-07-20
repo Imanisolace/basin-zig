@@ -43,7 +43,7 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
         return BasinError.EmptyInput;
     }
 
-    const out = try allocator.alloc(u8, 32); // 32 bytes = 256 bit Poseidon
+    const out = try allocator.alloc(u8, 16); // 16 bytes = 256 bit Poseidon
     errdefer allocator.free(out);
 
     if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
