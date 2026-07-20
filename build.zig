@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
             "src/basin_poseidon.c",
             "src/basin_parallel.c",
         },
-      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }, // <-- only change
+      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" },
     });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
@@ -55,10 +55,17 @@ pub fn build(b: *std.Build) void {
             "src/basin_poseidon.c",
             "src/basin_parallel.c",
         },
-      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }, // <-- only change
+      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" },
     });
     tests.root_module.addImport("basin", basin_mod);
 
     const test_step = b.step("test", "Run correctness tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
+
+    // === ADD THIS: STEP 3/6 BENCH ===
+    const bench_cmd = b.addRunArtifact(exe);
+    bench_cmd.step.dependOn(b.getInstallStep());
+    bench_cmd.addArgs(&.{ "--bench", "--threads", "4" });
+    const bench_step = b.step("bench", "Run ReleaseFast benchmark with 4 threads");
+    bench_step.dependOn(&bench_cmd.step);
 }
