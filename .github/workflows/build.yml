@@ -6,8 +6,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup Zig 0.13.0
         uses: mlugg/setup-zig@v1
@@ -17,11 +20,11 @@ jobs:
       - name: Build
         run: zig build --summary all
 
-      - name: Test
+      - name: Test - Vectors + Properties
         run: zig build test --summary all
 
-      - name: Run Example
-        run: zig build run -- "ci run"
+      - name: Run Example - Smoke
+        run: zig build run -- "ci smoke run"
 
-      - name: Run Bench + Threads
-        run: zig build run -- --bench --threads 4 "ci run"
+      - name: Run Bench + Threads - Stress
+        run: zig build run -- --bench --threads 4 "ci stress run"
