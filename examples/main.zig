@@ -83,7 +83,7 @@ pub fn main()!void {
     }
 
     // Single parallel run
-    if (cfg.threads > 1 and!cfg.bench) {
+    if (cfg.threads > 1 and ! cfg.bench) {
         try stdout.print("--- Parallel Process ---\n",.{});
         const s = std.time.milliTimestamp();
         try basin.parallelProcess(cfg.data, cfg.threads);
