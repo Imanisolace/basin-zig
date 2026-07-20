@@ -39,60 +39,50 @@ pub fn main()!void {
         return err;
     };
 
-    // Buffered stdout so CI doesn't panic on pipe close
-    var bw = std.io.bufferedWriter(std.io.getStdOut().writer());
-    const stdout = bw.writer();
-    defer bw.flush() catch {};
+    std.debug.print("=== Basin Zig v0.1.1 ===\n",.{});
+    std.debug.print("Input: '{s}'\n",.{cfg.data});
 
-    stdout.print("=== Basin Zig v0.1.1 ===\n",.{}) catch {};
-    stdout.print("Input: '{s}'\n",.{cfg.data}) catch {};
-
-    // Pick config: big for bench, small for single hash
     const basin_cfg = if (cfg.bench)
         basin.BasinConfig{.width = 256,.height = 256,.channels = 3 }
     else
         basin.BasinConfig{.width = 3,.height = 1,.channels = 1 };
 
-    basin.init(basin_cfg) catch {};
+    try basin.init(basin_cfg);
     defer basin.deinit();
 
-    // Single hash
-    const hash_bytes = basin.poseidonHash(cfg.data, allocator) catch return;
+    const hash_bytes = try basin.poseidonHash(cfg.data, allocator);
     defer allocator.free(hash_bytes);
-    const hex = basin.toHex(hash_bytes, allocator) catch return;
+    const hex = try basin.toHex(hash_bytes, allocator);
     defer allocator.free(hex);
-    stdout.print("Hash: {s}\n\n",.{hex}) catch {};
+    std.debug.print("Hash: {s}\n\n",.{hex});
 
-    // Benchmarks
     if (cfg.bench) {
-        stdout.print("--- Speed: 100 hashes ---\n",.{}) catch {};
+        std.debug.print("--- Speed: 100 hashes ---\n",.{});
         const start = std.time.milliTimestamp();
         var i: usize = 0;
         while (i < 100) : (i += 1) {
-            const h = basin.poseidonHash(cfg.data, allocator) catch continue;
+            const h = try basin.poseidonHash(cfg.data, allocator);
             allocator.free(h);
         }
         const elapsed = std.time.milliTimestamp() - start;
         const rate: f64 = if (elapsed > 0) 100.0 / @as(f64, @floatFromInt(elapsed)) else 0;
-        stdout.print("{d}ms -> {d:.2} hashes/ms\n",.{elapsed, rate}) catch {};
+        std.debug.print("{d}ms -> {d:.2} hashes/ms\n",.{elapsed, rate});
 
-        // Thread scaling - reduced for CI
-        stdout.print("--- Thread Scaling ---\n",.{}) catch {};
+        std.debug.print("--- Thread Scaling ---\n",.{});
         const thread_list = [_]i32{ 1, 2, 4 };
         for (thread_list) |t| {
             const s = std.time.milliTimestamp();
-            basin.parallelProcess(cfg.data, t) catch {};
+            try basin.parallelProcess(cfg.data, t);
             const e = std.time.milliTimestamp() - s;
-            stdout.print("Threads {d}: {d}ms\n",.{t, e}) catch {};
+            std.debug.print("Threads {d}: {d}ms\n",.{t, e});
         }
     }
 
-    // Single parallel run
     if (cfg.threads > 1 and!cfg.bench) {
-        stdout.print("--- Parallel Process ---\n",.{}) catch {};
+        std.debug.print("--- Parallel Process ---\n",.{});
         const s = std.time.milliTimestamp();
-        basin.parallelProcess(cfg.data, cfg.threads) catch {};
+        try basin.parallelProcess(cfg.data, cfg.threads);
         const e = std.time.milliTimestamp() - s;
-        stdout.print("Threads {d}: {d}ms\n",.{cfg.threads, e}) catch {};
+        std.debug.print("Threads {d}: {d}ms\n",.{cfg.threads, e});
     }
 }
