@@ -18,7 +18,6 @@ pub const BasinConfig = struct {
 };
 
 pub fn init(cfg: BasinConfig) !void {
-    // Guard against bad C input
     if (cfg.width == 0 or cfg.height == 0 or cfg.channels == 0) {
         return BasinError.InvalidConfig;
     }
@@ -43,7 +42,7 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
         return BasinError.EmptyInput;
     }
 
-    const out = try allocator.alloc(u8, 16); // 16 bytes = 256 bit Poseidon
+    const out = try allocator.alloc(u8, 32); // C writes 32 bytes
     errdefer allocator.free(out);
 
     if (c.basin_poseidon_hash(input.ptr, input.len, out.ptr) != 0) {
