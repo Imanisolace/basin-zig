@@ -99,3 +99,37 @@ test "STRESS: parallelProcess is thread-safe" {
         }
     }.run);
 }
+
+test "PROP: empty input works" {
+    try withBasin(struct{
+        fn run() !void {
+            const hex = try hashToHex("", std.testing.allocator);
+            defer std.testing.allocator.free(hex);
+            try std.testing.expect(hex.len == 32);
+        }
+    }.run);
+}
+
+test "PROP: large input does not overflow" {
+    try withBasin(struct{
+        fn run() !void {
+            const big = try std.testing.allocator.alloc(u8, 1024 * 1024);
+            defer std.testing.allocator.free(big);
+            @memset(big, 'A');
+            
+            const hex = try hashToHex(big, std.testing.allocator);
+            defer std.testing.allocator.free(hex);
+            try std.testing.expect(hex.len == 32);
+        }
+    }.run);
+}
+
+test "PROP: allocator failure is handled" {
+    try withBasin(struct{
+        fn run() !void {
+            var fail = std.testing.FailingAllocator.init(std.testing.allocator, 0);
+            const result = hashToHex("test", fail.allocator());
+            try std.testing.expectError(error.OutOfMemory, result);
+        }
+    }.run);
+}
