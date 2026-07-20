@@ -27,7 +27,7 @@ jobs:
         run: zig build run -- "ci smoke run"
 
       - name: Run Bench + Threads - Stress
-        run: zig build run --bench --threads 4 "ci stress run"
+        run: zig build bench -Doptimize=ReleaseFast -- "ci stress run"
 
   asan:
     runs-on: ubuntu-latest
