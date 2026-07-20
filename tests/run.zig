@@ -122,7 +122,7 @@ test "MEM: no leaks on error path" {
 }
 
 // === EDGE CASES ===
-test "EDGE: block boundaries 23,24,25" { // changed to 24 because block=24
+test "EDGE: block boundaries 23,24,25" {
     try withBasin(struct {
         fn run()!void {
             const allocator = std.testing.allocator;
@@ -145,8 +145,7 @@ test "KAT 1: abc" {
         fn run()!void {
             const hex = try hashToHex("abc", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            // TODO: Run once, copy output here
-            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH", hex);
+            try std.testing.expectEqualStrings("926004b8006452630ea03001977ac60814a001cca62f56086162638000000000", hex);
         }
     }.run);
 }
@@ -156,8 +155,7 @@ test "KAT 2: long input" {
         fn run()!void {
             const hex = try hashToHex("The quick brown fox jumps over the lazy dog", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            // TODO: Run once, copy output here
-            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH_2", hex);
+            try std.testing.expectEqualStrings("619c49e163bd7a867e1f872adcf6a02946bffa869936292f73206f7665722074", hex);
         }
     }.run);
 }
@@ -166,7 +164,6 @@ test "STREAM: matches one-shot" {
     try withBasin(struct {
         fn run()!void {
             const allocator = std.testing.allocator;
-            // FIX: runtime alloc instead of compile-time
             const data = try allocator.alloc(u8, 10000);
             defer allocator.free(data);
             @memset(data, 'x');
@@ -197,7 +194,8 @@ test "BENCH: speed vs sha256" {
             std.crypto.random.bytes(data);
 
             var timer = try std.time.Timer.start();
-            _ = try basin.poseidonHash(data, allocator);
+            const hash = try basin.poseidonHash(data, allocator); // FIX: capture to free
+            defer allocator.free(hash);
             const basin_ns = timer.read();
 
             timer.reset();
