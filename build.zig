@@ -27,23 +27,19 @@ pub fn build(b: *std.Build) void {
             "src/basin_poseidon.c",
             "src/basin_parallel.c",
         },
-      .flags = &.{ "-std=c99", "-O2" },
+      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }, // <-- only change
     });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    // RUN STEP with args
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-
-    if (b.args) |args| { // <-- this is the key line
+    if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run the benchmark example");
     run_step.dependOn(&run_cmd.step);
 
-    // TEST STEP
     const tests = b.addTest(.{
        .root_source_file = b.path("tests/run.zig"),
        .target = target,
@@ -59,7 +55,7 @@ pub fn build(b: *std.Build) void {
             "src/basin_poseidon.c",
             "src/basin_parallel.c",
         },
-      .flags = &.{ "-std=c99", "-O2" },
+      .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }, // <-- only change
     });
     tests.root_module.addImport("basin", basin_mod);
 
