@@ -102,10 +102,10 @@ test "PARALLEL: invalid threads" {
 test "CONCURRENT: thread safety" {
     try basin.init(.{.width = 128,.height = 128,.channels = 1 });
     defer basin.deinit();
-    
+
     const allocator = std.testing.allocator;
     var threads: [8]std.Thread = undefined;
-    
+
     for (&threads) |*t| {
         t.* = try std.Thread.spawn(.{}, struct {
             fn worker()!void {
@@ -121,25 +121,91 @@ test "MEM: no leaks on error path" {
     try std.testing.expectError(basin.BasinError.EmptyInput, basin.poseidonHash("", std.testing.allocator));
 }
 
-// === NEW SQA TESTS ===
-test "KAT 1: abc expected hash" {
+// === EDGE CASES ===
+test "EDGE: block boundaries 63,64,65" {
     try withBasin(struct {
         fn run()!void {
-            const hex = try hashToHex("abc", std.testing.allocator);
-            defer std.testing.allocator.free(hex);
-            // TODO: replace with real poseidon hash for "abc"
-            try std.testing.expectEqual(@as(usize, 64), hex.len);
+            const allocator = std.testing.allocator;
+            for ([_]usize{63, 64, 65, 128, 1024}) |len| {
+                const data = try allocator.alloc(u8, len);
+                defer allocator.free(data);
+                @memset(data, 'a');
+                const hash = try basin.poseidonHash(data, allocator);
+                defer allocator.free(hash);
+                try std.testing.expectEqual(@as(usize, 32), hash.len);
+            }
         }
     }.run);
 }
 
-test "KAT 2: long input expected hash" {
+// === NEW SQA TESTS ===
+
+test "KAT 1: abc" {
+    try withBasin(struct {
+        fn run()!void {
+            const hex = try hashToHex("abc", std.testing.allocator);
+            defer std.testing.allocator.free(hex);
+            // TODO: Replace this with the real hash output from your C
+            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH", hex);
+        }
+    }.run);
+}
+
+test "KAT 2: long input" {
     try withBasin(struct {
         fn run()!void {
             const hex = try hashToHex("The quick brown fox jumps over the lazy dog", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            // TODO: replace with real poseidon hash
-            try std.testing.expectEqual(@as(usize, 64), hex.len);
+            // TODO: Replace this with the real hash output from your C
+            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH_2", hex);
+        }
+    }.run);
+}
+
+test "STREAM: matches one-shot" {
+    try withBasin(struct {
+        fn run()!void {
+            const allocator = std.testing.allocator;
+            const data = "x" ** 10000;
+
+            // one shot
+            const h1 = try basin.poseidonHash(data, allocator);
+            defer allocator.free(h1);
+
+            // streaming - THIS WILL FAIL UNTIL YOU ADD Hasher to src/basin.zig
+            var hasher = try basin.Hasher.init();
+            defer hasher.deinit();
+            hasher.update(data[0..5000]);
+            hasher.update(data[5000..]);
+            var h2: [32]u8 = undefined;
+            hasher.final(&h2);
+
+            try std.testing.expectEqualSlices(u8, h1, &h2);
+        }
+    }.run);
+}
+
+test "BENCH: speed vs sha256" {
+    try withBasin(struct {
+        fn run()!void {
+            const allocator = std.testing.allocator;
+            const data = try allocator.alloc(u8, 1024*1024); // 1MB
+            defer allocator.free(data);
+            std.crypto.random.bytes(data);
+
+            var timer = try std.time.Timer.start();
+            _ = try basin.poseidonHash(data, allocator);
+            const basin_ns = timer.read();
+
+            timer.reset();
+            var sha = std.crypto.hash.sha2.Sha256.init(.{});
+            sha.update(data);
+            _ = sha.final(&[_]u8{});
+            const sha_ns = timer.read();
+
+            const basin_mb_s = 1024.0 / (@as(f64, @floatFromInt(basin_ns)) / 1e9);
+            const sha_mb_s = 1024.0 / (@as(f64, @floatFromInt(sha_ns)) / 1e9);
+            std.debug.print("\nbasin: {d:.2} MB/s | sha256: {d:.2} MB/s | {d:.2}x faster\n",.{basin_mb_s, sha_mb_s, basin_mb_s/sha_mb_s});
         }
     }.run);
 }
@@ -155,7 +221,7 @@ test "FUZZ: random bytes don't crash" {
             while (i < 1000) : (i += 1) {
                 const len = rng.random().intRangeAtMost(usize, 0, buf.len);
                 rng.random().bytes(buf[0..len]);
-                
+
                 const hash = basin.poseidonHash(buf[0..len], allocator) catch continue;
                 defer allocator.free(hash);
                 try std.testing.expectEqual(@as(usize, 32), hash.len);
@@ -173,7 +239,7 @@ test "FUZZ: toHex with random data" {
     while (i < 500) : (i += 1) {
         const len = rng.random().intRangeAtMost(usize, 1, buf.len);
         rng.random().bytes(buf[0..len]);
-        
+
         const hex = try basin.toHex(buf[0..len], allocator);
         defer allocator.free(hex);
         try std.testing.expectEqual(len * 2, hex.len);
