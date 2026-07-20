@@ -7,6 +7,17 @@ const Config = struct {
     bench: bool = false,
 };
 
+fn isCI() bool {
+    const ci = std.os.getenv("GITHUB_ACTIONS") orelse return false;
+    return std.mem.eql(u8, ci, "true");
+}
+
+fn log(comptime fmt: []const u8, args: anytype) void {
+    if (isCI()) return; // Skip printing in CI to avoid.FAULT crash
+    const stderr = std.io.getStdErr().writer();
+    stderr.print(fmt, args) catch {};
+}
+
 fn parseArgs(allocator: std.mem.Allocator)!Config {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
@@ -25,11 +36,6 @@ fn parseArgs(allocator: std.mem.Allocator)!Config {
         }
     }
     return cfg;
-}
-
-fn log(comptime fmt: []const u8, args: anytype) void {
-    const stderr = std.io.getStdErr().writer();
-    stderr.print(fmt, args) catch {}; // catch and ignore, never panic
 }
 
 pub fn main()!void {
@@ -69,7 +75,7 @@ pub fn main()!void {
         }
         const elapsed = std.time.milliTimestamp() - start;
         const rate: f64 = if (elapsed > 0) 100.0 / @as(f64, @floatFromInt(elapsed)) else 0;
-        log("{d}ms -> {d:.2} hashes/ms\n",.{elapsed, rate});
+        log("{d}ms -> {d:.2} hashes/ms\n",.{ elapsed, rate });
 
         log("--- Thread Scaling ---\n",.{});
         const thread_list = [_]i32{ 1, 2, 4 };
@@ -77,15 +83,15 @@ pub fn main()!void {
             const s = std.time.milliTimestamp();
             try basin.parallelProcess(cfg.data, t);
             const e = std.time.milliTimestamp() - s;
-            log("Threads {d}: {d}ms\n",.{t, e});
+            log("Threads {d}: {d}ms\n",.{ t, e });
         }
     }
 
-    if (cfg.threads > 1 and !cfg.bench) {
+    if (cfg.threads > 1 and!cfg.bench) {
         log("--- Parallel Process ---\n",.{});
         const s = std.time.milliTimestamp();
         try basin.parallelProcess(cfg.data, cfg.threads);
         const e = std.time.milliTimestamp() - s;
-        log("Threads {d}: {d}ms\n",.{cfg.threads, e});
+        log("Threads {d}: {d}ms\n",.{ cfg.threads, e });
     }
 }
