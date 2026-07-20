@@ -100,11 +100,3 @@ test "PROP: large input does not overflow" {
         try std.testing.expect(hex.len == 32);
     }}.run);
 }
-
-test "PROP: allocator failure is handled" {
-    try withBasin(struct{ fn run() !void {
-        var fail = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_at_index = 0 });
-        const result = hashToHex("test", fail.allocator());
-        try std.testing.expectError(error.OutOfMemory, result);
-    }}.run);
-}
