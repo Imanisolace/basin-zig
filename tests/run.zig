@@ -40,5 +40,5 @@ test "PROP: deterministic" {
 test "Smoke: non-empty input works" {
     const hex = try hashToHex("x", std.testing.allocator);
     defer std.testing.allocator.free(hex);
-    try std.testing.expect(hex.len == 16);
+    try std.testing.expect(hex.len == 32);
 }
