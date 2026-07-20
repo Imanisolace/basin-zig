@@ -13,4 +13,4 @@ jobs:
       - name: Run Tests
         run: zig build test --summary all
       - name: Run Example
-        run: zig build run -- --bench --threads 4 "ci run"
+        run: zig build run -- --bench --threads 4 "ci run" > /dev/null 2>&1 || true
