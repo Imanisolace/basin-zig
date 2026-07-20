@@ -27,7 +27,7 @@ jobs:
         run: zig build run -- "ci smoke run"
 
       - name: Run Bench + Threads - Stress
-        run: zig build run -- --bench --threads 4 "ci stress run"
+        run: zig build run --bench --threads 4 "ci stress run"
 
   asan:
     runs-on: ubuntu-latest
@@ -48,3 +48,28 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           CFLAGS: -fsanitize=address -fno-omit-frame-pointer
           LDFLAGS: -fsanitize=address
+
+  valgrind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig 0.13.0
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Install Valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Build ReleaseFast
+        run: zig build -Doptimize=ReleaseFast
+
+      - name: Valgrind Test Runner
+        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/test
+
+      - name: Valgrind Example
+        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
