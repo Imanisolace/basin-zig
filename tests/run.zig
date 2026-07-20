@@ -1,5 +1,6 @@
 const std = @import("std");
 const basin = @import("basin");
+const prng = std.Random.DefaultPrng;
 
 fn withBasin(test_fn: fn () anyerror!void)!void {
     try basin.init(.{.width = 256,.height = 256,.channels = 3 });
@@ -13,26 +14,19 @@ fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     return try basin.toHex(hash_bytes, allocator);
 }
 
+// === EXISTING TESTS ===
 test "INIT: valid config" {
-    try withBasin(struct {
-        fn run()!void {}
-    }.run);
+    try withBasin(struct { fn run()!void {} }.run);
 }
 
 test "INIT: invalid config fails" {
-    try std.testing.expectError(
-        basin.BasinError.InvalidConfig,
-        basin.init(.{.width = 0,.height = 1,.channels = 1 }),
-    );
+    try std.testing.expectError(basin.BasinError.InvalidConfig, basin.init(.{.width = 0,.height = 1,.channels = 1 }));
 }
 
 test "HASH: empty input fails" {
     try withBasin(struct {
         fn run()!void {
-            try std.testing.expectError(
-                basin.BasinError.EmptyInput,
-                basin.poseidonHash("", std.testing.allocator),
-            );
+            try std.testing.expectError(basin.BasinError.EmptyInput, basin.poseidonHash("", std.testing.allocator));
         }
     }.run);
 }
@@ -100,10 +94,7 @@ test "PARALLEL: valid" {
 test "PARALLEL: invalid threads" {
     try withBasin(struct {
         fn run()!void {
-            try std.testing.expectError(
-                basin.BasinError.InvalidConfig,
-                basin.parallelProcess("data", 0),
-            );
+            try std.testing.expectError(basin.BasinError.InvalidConfig, basin.parallelProcess("data", 0));
         }
     }.run);
 }
@@ -123,14 +114,68 @@ test "CONCURRENT: thread safety" {
             }
         }.worker,.{});
     }
-    for (threads) |t| {
-        t.join();
-    }
+    for (threads) |t| { t.join(); }
 }
 
 test "MEM: no leaks on error path" {
-    try std.testing.expectError(
-        basin.BasinError.EmptyInput,
-        basin.poseidonHash("", std.testing.allocator),
-    );
+    try std.testing.expectError(basin.BasinError.EmptyInput, basin.poseidonHash("", std.testing.allocator));
+}
+
+// === NEW SQA TESTS ===
+test "KAT 1: abc expected hash" {
+    try withBasin(struct {
+        fn run()!void {
+            const hex = try hashToHex("abc", std.testing.allocator);
+            defer std.testing.allocator.free(hex);
+            // TODO: replace with real poseidon hash for "abc"
+            try std.testing.expectEqual(@as(usize, 64), hex.len);
+        }
+    }.run);
+}
+
+test "KAT 2: long input expected hash" {
+    try withBasin(struct {
+        fn run()!void {
+            const hex = try hashToHex("The quick brown fox jumps over the lazy dog", std.testing.allocator);
+            defer std.testing.allocator.free(hex);
+            // TODO: replace with real poseidon hash
+            try std.testing.expectEqual(@as(usize, 64), hex.len);
+        }
+    }.run);
+}
+
+test "FUZZ: random bytes don't crash" {
+    try withBasin(struct {
+        fn run()!void {
+            var rng = prng.init(0x1234);
+            const allocator = std.testing.allocator;
+            var buf: [256]u8 = undefined;
+
+            var i: usize = 0;
+            while (i < 1000) : (i += 1) {
+                const len = rng.random().intRangeAtMost(usize, 0, buf.len);
+                rng.random().bytes(buf[0..len]);
+                
+                const hash = basin.poseidonHash(buf[0..len], allocator) catch continue;
+                defer allocator.free(hash);
+                try std.testing.expectEqual(@as(usize, 32), hash.len);
+            }
+        }
+    }.run);
+}
+
+test "FUZZ: toHex with random data" {
+    const allocator = std.testing.allocator;
+    var rng = prng.init(0x5678);
+    var buf: [256]u8 = undefined;
+
+    var i: usize = 0;
+    while (i < 500) : (i += 1) {
+        const len = rng.random().intRangeAtMost(usize, 1, buf.len);
+        rng.random().bytes(buf[0..len]);
+        
+        const hex = try basin.toHex(buf[0..len], allocator);
+        defer allocator.free(hex);
+        try std.testing.expectEqual(len * 2, hex.len);
+    }
 }
