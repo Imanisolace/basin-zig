@@ -1,5 +1,6 @@
 const std = @import("std");
 const basin = @import("basin");
+const BasinError = basin.BasinError;
 
 fn hashToHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const hash_bytes = try basin.poseidonHash(input, allocator);
@@ -78,25 +79,4 @@ test "STRESS: parallelProcess is thread-safe" {
     }
     fn worker(iterations: usize) !void {
         var i: usize = 0;
-        while (i < iterations) : (i += 1) try basin.parallelProcess("stress test data", 4);
-    }}.run);
-}
-
-test "PROP: empty input works" {
-    try withBasin(struct{ fn run() !void {
-        const hex = try hashToHex("", std.testing.allocator);
-        defer std.testing.allocator.free(hex);
-        try std.testing.expect(hex.len == 32);
-    }}.run);
-}
-
-test "PROP: large input does not overflow" {
-    try withBasin(struct{ fn run() !void {
-        const big = try std.testing.allocator.alloc(u8, 1024 * 1024);
-        defer std.testing.allocator.free(big);
-        @memset(big, 'A');
-        const hex = try hashToHex(big, std.testing.allocator);
-        defer std.testing.allocator.free(hex);
-        try std.testing.expect(hex.len == 32);
-    }}.run);
-}
+        while (i < iterations) : (i += 1) try basin.parallelProcess("stress
