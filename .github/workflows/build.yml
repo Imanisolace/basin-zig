@@ -28,3 +28,23 @@ jobs:
 
       - name: Run Bench + Threads - Stress
         run: zig build run -- --bench --threads 4 "ci stress run"
+
+  asan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Zig 0.13.0
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Test ReleaseFast with ASAN
+        run: zig build test -Doptimize=ReleaseFast --summary all
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          CFLAGS: -fsanitize=address -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address
