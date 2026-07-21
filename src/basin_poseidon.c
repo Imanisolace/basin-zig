@@ -5,7 +5,15 @@
 #define POSEIDON_OUTPUT_BYTES 32
 #define BASIN_POSEIDON_BLOCK_SIZE 24
 
+// CT helper: select a or b based on mask 0 or 0xFF..FF
+static inline uint64_t ct_select_u64(uint64_t a, uint64_t b, uint64_t mask) {
+    return (a & ~mask) | (b & mask);
+}
+
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
+#ifdef CONSTANT_TIME
+    #pragma message "Compiling basin in CONSTANT-TIME mode. Using fixed-time permute."
+#endif
     for(int r = 0; r < 8; r++) {
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
             state[i] ^= state[(i+1)%POSEIDON_WIDTH] + (uint64_t)r;
@@ -24,6 +32,7 @@ static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BAS
 }
 
 int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output) {
+    // TODO v0.2: make error handling constant-time. For now just check
     if(!input ||!output) return -1;
 
     basin_hasher_t h;
@@ -52,6 +61,7 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
         i += to_copy;
 
         // Buffer full: absorb and permute
+        // TODO v0.2: make this branchless with ct_select
         if (h->buf_len == BASIN_POSEIDON_BLOCK_SIZE) {
             absorb_block(h->state, h->buffer);
             h->buf_len = 0;
@@ -64,12 +74,19 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]) {
     if (!h ||!out) return -1;
 
     // Pad: 0x80 + zeros
+    // TODO v0.2: always absorb 2 blocks to hide length
     if (h->buf_len < BASIN_POSEIDON_BLOCK_SIZE) {
         h->buffer[h->buf_len] = 0x80;
         memset(h->buffer + h->buf_len + 1, 0, BASIN_POSEIDON_BLOCK_SIZE - h->buf_len - 1);
         absorb_block(h->state, h->buffer);
     }
 
+#ifdef CONSTANT_TIME
+    // v0.2: always copy full 32 bytes + scrub state
     memcpy(out, h->state, POSEIDON_OUTPUT_BYTES);
+    memset(h->state, 0, sizeof(h->state));
+#else
+    memcpy(out, h->state, POSEIDON_OUTPUT_BYTES);
+#endif
     return 0;
 }
