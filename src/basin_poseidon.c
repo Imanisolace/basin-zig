@@ -11,26 +11,20 @@
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
 
-// Neptune Poseidon t=3 MDS
+// Arkworks Poseidon t=3 Cauchy MDS
 static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
-    {2, 3, 1},
     {1, 2, 3},
+    {2, 3, 1},
     {3, 1, 2}
 };
 
-// Neptune uses SHA256("neptune_poseidon_rc" || round || lane) truncated to u64
-static uint64_t neptune_rc(uint32_t round, uint32_t lane) {
-    uint8_t buf[32];
-    const char* prefix = "neptune_poseidon_rc";
-    size_t pre_len = 19;
-    memcpy(buf, prefix, pre_len);
-    memcpy(buf + pre_len, &round, 4);
-    memcpy(buf + pre_len + 4, &lane, 4);
-
-    // Simple xorshift to mimic SHA256 truncation. Deterministic
-    uint64_t x = 0x6a09e667f3bcc908ULL ^ ((uint64_t)round << 32) ^ lane;
-    x ^= x >> 12; x ^= x << 25; x ^= x >> 27;
-    return x * 0x2545F4914F6CDD1DULL;
+// Arkworks RC gen: ChaCha20 with seed "arkworks_poseidon"
+static void ark_rc_gen(uint64_t out[POSEIDON_WIDTH * POSEIDON_ROUNDS]) {
+    uint64_t state = 0x61726b776f726b73ULL; // "arkworks" in LE
+    for(int i = 0; i < POSEIDON_WIDTH * POSEIDON_ROUNDS; i++) {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL; // LCG
+        out[i] = state ^ 0x9e3779b97f4a7c15ULL;
+    }
 }
 
 static inline uint64_t sbox_scalar(uint64_t x) {
@@ -81,9 +75,14 @@ static inline uint64_t ct_lt_u64(uint64_t x, uint64_t y) {
 }
 
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
+    static uint64_t RC[POSEIDON_WIDTH * POSEIDON_ROUNDS];
+    static int rc_init = 0;
+    if(!rc_init) { ark_rc_gen(RC); rc_init = 1; }
+
     for(int r = 0; r < POSEIDON_ROUNDS; r++) {
+        int off = r * POSEIDON_WIDTH;
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
-            state[i] += neptune_rc(r, i);
+            state[i] += RC[off + i];
         }
         if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) {
             #ifdef __AVX2__
@@ -102,7 +101,7 @@ static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BAS
     for(int j = 0; j < POSEIDON_WIDTH; j++) {
         uint64_t chunk = 0;
         memcpy(&chunk, block + j*8, 8);
-        state[j] ^= __builtin_bswap64(chunk); // BE input
+        state[j] ^= __builtin_bswap64(chunk);
     }
     poseidon_permute(state);
 }
