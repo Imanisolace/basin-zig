@@ -32,7 +32,7 @@ pub fn init(cfg: BasinConfig)!void {
       .channels = cfg.channels,
     };
 
-    if (c.basin_init(&c_cfg)!= 0) {
+    if (c.basin_init(&c_cfg) != 0) {
         return BasinError.InitFailed;
     }
 }
@@ -77,7 +77,7 @@ pub fn parallelProcess(data: []const u8, threads: i32)!void {
     if (data.len == 0) return BasinError.EmptyInput;
     if (threads <= 0) return BasinError.InvalidConfig;
 
-    if (c.basin_parallel_process(data.ptr, data.len, threads)!= 0) {
+    if (c.basin_parallel_process(data.ptr, data.len, threads) != 0) {
         return BasinError.ParallelFailed;
     }
 }
@@ -90,14 +90,14 @@ pub const Hasher = struct {
     /// Start a new hash
     pub fn init()!Hasher {
         var h: Hasher = undefined;
-        if (c.basin_hasher_init(&h.c_hasher)!= 0) return BasinError.InitFailed;
+        if (c.basin_hasher_init(&h.c_hasher) != 0) return BasinError.InitFailed;
         h.initialized = true;
         return h;
     }
 
     /// Absorb more data. Can be called multiple times
     pub fn update(self: *Hasher, data: []const u8)!void {
-        if (c.basin_hasher_update(&self.c_hasher, data.ptr, data.len)!= 0) {
+        if (c.basin_hasher_update(&self.c_hasher, data.ptr, data.len) != 0) {
             return BasinError.HashFailed;
         }
     }
