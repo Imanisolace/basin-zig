@@ -21,8 +21,8 @@ static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
     {3, 1, 2}
 };
 
-// TODO: Replace with your real field prime. Using u64 max for now
-#define FIELD_MOD 0xFFFFFFFFULL
+// FIX 1: This was 0xFFFFFFFF. Broke everything. Back to u64
+#define FIELD_MOD 0xFFFFFFFFFFFFFFFFULL
 
 // Deterministic PRNG for round constants. Matches HorizenLabs seed
 static uint64_t rc_gen(uint64_t seed) {
@@ -40,11 +40,10 @@ static inline uint64_t sbox_scalar(uint64_t x) {
 
 #ifdef __AVX2__
 static inline __m256i vmul_mod(__m256i a, __m256i b) {
-    // v0.2.0: 4x scalar mul + mod. Replace with 128bit barrett later
     uint64_t A[4], B[4], R[4];
     _mm256_storeu_si256((__m256i*)A, a);
     _mm256_storeu_si256((__m256i*)B, b);
-    for(int i=0;i<4;i++) R[i] = (A[i] * B[i]) % FIELD_MOD;
+    for(int i=0;i<4;i++) R[i] = (A[i] * B[i]); // mod 2^64 is free
     return _mm256_loadu_si256((__m256i*)R);
 }
 
@@ -63,8 +62,7 @@ static inline void mds_mul(uint64_t state[POSEIDON_WIDTH]) {
     uint64_t new_state[POSEIDON_WIDTH] = {0};
     for(int i = 0; i < POSEIDON_WIDTH; i++) {
         for(int j = 0; j < POSEIDON_WIDTH; j++) {
-            new_state[i] += MDS[i][j] * state[j];
-            new_state[i] %= FIELD_MOD;
+            new_state[i] += MDS[i][j] * state[j]; // mod 2^64
         }
     }
     memcpy(state, new_state, sizeof(new_state));
@@ -89,7 +87,6 @@ static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
         // Add round constants
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
             state[i] += rc_gen(seed + r*POSEIDON_WIDTH + i);
-            state[i] %= FIELD_MOD;
         }
         // S-boxes: full rounds vs partial
         if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) {
@@ -110,7 +107,8 @@ static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BAS
     for(int j = 0; j < POSEIDON_WIDTH; j++) {
         uint64_t chunk = 0;
         memcpy(&chunk, block + j*8, 8);
-        state[j] ^= chunk;
+        // FIX 2: Input is BE. Convert to host LE for math
+        state[j] ^= __builtin_bswap64(chunk);
     }
     poseidon_permute(state);
 }
@@ -161,7 +159,7 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTE
     memcpy(out_state, h->state, sizeof(out_state));
     absorb_block(out_state, zero_block);
 
-    // FIX: Convert to big-endian before copy
+    // Convert to big-endian on output
     for(int i=0; i<POSEIDON_WIDTH; i++) {
         uint64_t be = __builtin_bswap64(h->state[i]);
         memcpy(out + i*8, &be, 8);
