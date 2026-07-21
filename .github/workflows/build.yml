@@ -11,10 +11,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig 0.13.0
+      - name: Setup Zig 0.14.0
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.14.0
 
       - name: Build
         run: zig build --summary all
@@ -36,10 +36,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig 0.13.0
+      - name: Setup Zig 0.14.0
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.14.0
 
       - name: Test ReleaseFast with ASAN
         run: zig build test -Doptimize=ReleaseFast --summary all
@@ -56,10 +56,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Zig 0.13.0
+      - name: Setup Zig 0.14.0
         uses: mlugg/setup-zig@v1
         with:
-          version: 0.13.0
+          version: 0.14.0
 
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
