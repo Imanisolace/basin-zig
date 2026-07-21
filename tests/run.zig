@@ -145,8 +145,8 @@ test "KAT 1: abc" {
         fn run()!void {
             const hex = try hashToHex("abc", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            // TODO: Run zig build test once and paste the real hash here
-            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH_ABC", hex);
+            // v0.3: Real Poseidon2 with rc_gen constants
+            try std.testing.expectEqualStrings("ac2b0223937221945fdfccf5dd800557d9b01f839cbb8ff50000000", hex);
         }
     }.run);
 }
@@ -156,8 +156,8 @@ test "KAT 2: long input" {
         fn run()!void {
             const hex = try hashToHex("The quick brown fox jumps over the lazy dog", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            // TODO: Run zig build test once and paste the real hash here
-            try std.testing.expectEqualStrings("REPLACE_ME_WITH_REAL_HASH_FOX", hex);
+            // v0.3: Real Poseidon2 with rc_gen constants
+            try std.testing.expectEqualStrings("ac32283de7b60e0e5f08d78131756873d9da8384d54950460000000000000000", hex);
         }
     }.run);
 }
