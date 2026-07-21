@@ -7,6 +7,9 @@ pub fn build(b: *std.Build) void {
     // NEW: constant-time flag
     const constant_time = b.option(bool, "constant-time", "Enable constant-time mode. Slower but safe for secrets") orelse false;
 
+    // SPEED: add flag for release builds
+    const use_native = b.option(bool, "native", "Enable -march=native. Faster but not portable") orelse true;
+
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
         .target = target,
@@ -14,16 +17,34 @@ pub fn build(b: *std.Build) void {
     });
     basin_mod.addIncludePath(b.path("include"));
 
-    // FIX: Build flags dynamically so both branches have same type
-    var c_flags_list = std.ArrayList([]const u8).init(b.allocator);
-    defer c_flags_list.deinit();
+    // FIX: Build flags dynamically
+    var c_flags = std.ArrayList([]const u8).init(b.allocator);
+    defer c_flags.deinit();
 
-    c_flags_list.appendSlice(&.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
-    if (constant_time) {
-        c_flags_list.append("-DCONSTANT_TIME=1") catch @panic("OOM");
+    // Base flags
+    c_flags.appendSlice(&.{ "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
+
+    // Speed flags. This is what fixes Blocker 2
+    if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
+        c_flags.append("-O3") catch @panic("OOM"); // was O2
+        c_flags.append("-DNDEBUG") catch @panic("OOM"); // remove asserts
+        if (use_native) c_flags.append("-march=native") catch @panic("OOM");
+    } else {
+        c_flags.append("-O2") catch @panic("OOM"); // debug
     }
-    const c_flags = c_flags_list.items;
 
+    if (constant_time) {
+        c_flags.append("-DCONSTANT_TIME=1") catch @panic("OOM");
+    }
+
+    const c_files = &.{ 
+        "src/basin_config.c", 
+        "src/basin_init.c", 
+        "src/basin_poseidon.c", 
+        "src/basin_parallel.c" 
+    };
+
+    // ========== Example exe ==========
     const exe = b.addExecutable(.{
         .name = "basin-example",
         .root_source_file = b.path("examples/main.zig"),
@@ -33,10 +54,7 @@ pub fn build(b: *std.Build) void {
     exe.addIncludePath(b.path("include"));
     exe.linkLibC();
     exe.linkSystemLibrary("pthread");
-    exe.addCSourceFiles(.{
-        .files = &.{ "src/basin_config.c", "src/basin_init.c", "src/basin_poseidon.c", "src/basin_parallel.c" },
-        .flags = c_flags, // USE c_flags
-    });
+    exe.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
@@ -46,18 +64,16 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the benchmark example");
     run_step.dependOn(&run_cmd.step);
 
+    // ========== Tests ==========
     const tests = b.addTest(.{
         .root_source_file = b.path("tests/run.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = .ReleaseSafe, // Force ReleaseSafe for fair KAT + bench
     });
     tests.addIncludePath(b.path("include"));
     tests.linkLibC();
     tests.linkSystemLibrary("pthread");
-    tests.addCSourceFiles(.{
-        .files = &.{ "src/basin_config.c", "src/basin_init.c", "src/basin_poseidon.c", "src/basin_parallel.c" },
-        .flags = c_flags, // USE c_flags
-    });
+    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     tests.root_module.addImport("basin", basin_mod);
 
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
@@ -75,6 +91,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run correctness tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
+    // ========== Bench ==========
     const bench_cmd = b.addRunArtifact(exe);
     bench_cmd.step.dependOn(b.getInstallStep());
     bench_cmd.addArgs(&.{ "--bench", "--threads", "4" });
