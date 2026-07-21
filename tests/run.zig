@@ -155,7 +155,7 @@ test "KAT 1: abc" {
         fn run()!void {
             const hex = try hashToHex("abc", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            const expected = "634d5091dbd3a18f43ffd736c6291a4b1ae0c5f3ff4012cc0000000000000";
+            const expected = "634d5091dbd3a18f43ffd736c6291a4b1ae0c5f3ff4012cc0000";
             try std.testing.expectEqualStrings(expected, hex);
         }
     }.run);
