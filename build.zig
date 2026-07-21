@@ -3,7 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    
+
     // NEW: constant-time flag
     const constant_time = b.option(bool, "constant-time", "Enable constant-time mode. Slower but safe for secrets") orelse false;
 
@@ -14,11 +14,15 @@ pub fn build(b: *std.Build) void {
     });
     basin_mod.addIncludePath(b.path("include"));
 
-    // NEW: add -DCONSTANT_TIME=1 if flag is on
-    const c_flags = if (constant_time) 
-        &.{ "-std=c99", "-O2", "-DCONSTANT_TIME=1", "-Wall", "-Wextra", "-Werror", "-pedantic" }
-    else 
-        &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" };
+    // FIX: Build flags dynamically so both branches have same type
+    var c_flags_list = std.ArrayList([]const u8).init(b.allocator);
+    defer c_flags_list.deinit();
+
+    c_flags_list.appendSlice(&.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
+    if (constant_time) {
+        c_flags_list.append("-DCONSTANT_TIME=1") catch @panic("OOM");
+    }
+    const c_flags = c_flags_list.items;
 
     const exe = b.addExecutable(.{
         .name = "basin-example",
