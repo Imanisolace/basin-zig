@@ -81,18 +81,6 @@ static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BAS
     poseidon_permute(state);
 }
 
-int basin_init(BasinConfig* cfg) {
-    if (!cfg) return -1;
-    cfg->width = POSEIDON_WIDTH;
-    cfg->height = 1;
-    cfg->channels = 1;
-    return 0;
-}
-
-void basin_free(void) {
-    // nothing to free for static impl
-}
-
 int basin_hasher_init(basin_hasher_t* h) {
     if (!h) return -1;
     memset(h, 0, sizeof(*h));
@@ -156,9 +144,4 @@ int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output)
     basin_hasher_init(&h);
     basin_hasher_update(&h, input, input_len);
     return basin_hasher_final(&h, output);
-}
-
-int basin_parallel_process(const uint8_t* data, size_t len, int threads) {
-    (void)data; (void)len; (void)threads;
-    return 0; // TODO
 }
