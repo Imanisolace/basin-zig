@@ -5,15 +5,16 @@
 #define POSEIDON_OUTPUT_BYTES 32
 #define BASIN_POSEIDON_BLOCK_SIZE 24
 
+#ifdef CONSTANT_TIME
 // CT helper: select a or b based on mask 0 or 0xFF..FF
+// Used in v0.2 for branchless code
 static inline uint64_t ct_select_u64(uint64_t a, uint64_t b, uint64_t mask) {
     return (a & ~mask) | (b & mask);
 }
+#pragma message "Compiling basin in CONSTANT-TIME mode. Using fixed-time permute."
+#endif
 
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
-#ifdef CONSTANT_TIME
-    #pragma message "Compiling basin in CONSTANT-TIME mode. Using fixed-time permute."
-#endif
     for(int r = 0; r < 8; r++) {
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
             state[i] ^= state[(i+1)%POSEIDON_WIDTH] + (uint64_t)r;
