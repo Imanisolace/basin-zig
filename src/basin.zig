@@ -104,7 +104,7 @@ pub const Hasher = struct {
 
     /// Finalize and write 32 bytes to out
     pub fn final(self: *Hasher, out: *[32]u8)!void {
-        if (c.basin_hasher_final(&self.c_hasher, out)!= 0) {
+        if (c.basin_hasher_final(&self.c_hasher, out) != 0) {
             return BasinError.HashFailed;
         }
         self.initialized = false;
