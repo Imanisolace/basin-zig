@@ -4,63 +4,83 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Basin C lib
-    const basin_mod = b.addModule("basin",.{
-       .root_source_file = b.path("src/basin.zig"),
+    const basin_mod = b.addModule("basin", .{
+        .root_source_file = b.path("src/basin.zig"),
+        .target = target,
+        .optimize = optimize,
     });
+    basin_mod.addIncludePath(b.path("include"));
 
-    const basin_c = b.addLibrary(.{
-       .name = "basin",
-       .linkage =.static,
-       .target = target,
-       .optimize = optimize,
+    const exe = b.addExecutable(.{
+        .name = "basin-example",
+        .root_source_file = b.path("examples/main.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    basin_c.addCSourceFiles(.{
-       .files = &[_][]const u8{
-            "src/basin_init.c",
+    exe.addIncludePath(b.path("include"));
+    exe.linkLibC();
+    exe.linkSystemLibrary("pthread");
+    exe.addCSourceFiles(.{
+        .files = &.{
+            "src/basin_config.c",
+            "src/basin_init.c", 
             "src/basin_poseidon.c",
             "src/basin_parallel.c",
         },
-       .flags = &[_][]const u8{"-std=c11", "-O3", "-Wall"},
+        .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" },
     });
-    basin_c.linkLibC();
-    basin_c.linkLibCpp(); // for pthread
-    basin_mod.linkLibrary(basin_c);
+    exe.root_module.addImport("basin", basin_mod);
+    b.installArtifact(exe);
 
-    // Tests
+    const run_cmd = b.addRunArtifact(exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+    const run_step = b.step("run", "Run the benchmark example");
+    run_step.dependOn(&run_cmd.step);
+
     const tests = b.addTest(.{
-       .root_source_file = b.path("tests/run.zig"),
-       .target = target,
-       .optimize = optimize,
+        .root_source_file = b.path("tests/run.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    tests.addIncludePath(b.path("include"));
+    tests.linkLibC();
+    tests.linkSystemLibrary("pthread");
+    tests.addCSourceFiles(.{
+        .files = &.{
+            "src/basin_config.c",
+            "src/basin_init.c", 
+            "src/basin_poseidon.c",
+            "src/basin_parallel.c",
+        },
+        .flags = &.{ "-std=c99", "-O2", "-Wall", "-Wextra", "-Werror", "-pedantic" },
     });
     tests.root_module.addImport("basin", basin_mod);
 
-    // ---- ADD THIS FOR VALGRIND ----
-    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
-    tests.root_module.addAnonymousImport("build_config",.{
-       .root_source_file = b.addWriteFile("build_config.zig",
-            b.fmt("pub const skip_heavy = {};",.{skip_heavy})
-        ).getPath()
+    // ---- ADD THIS FOR VALGRIND SKIP ----
+    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false; // <-- ADD
+    tests.root_module.addAnonymousImport("build_config", .{ // <-- ADD
+        .root_source_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};", .{skip_heavy})).getPath() // <-- ADD
     });
-    // ---- END ADD ----
 
+    // ---- VALGRIND SUPPORT: Install test binary to zig-out/bin/basin-test ----
     const install_tests = b.option(bool, "install-tests", "Install the test binary to zig-out/bin") orelse false;
-    const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_tests.step);
-
     if (install_tests) {
-        const install = b.addInstallArtifact(tests,.{.dest_dir =.{.override =.bin } });
-        b.getInstallStep().dependOn(&install.step);
+        const install_art = b.addInstallArtifact(tests, .{
+            .dest_sub_path = "basin-test",
+        });
+        b.getInstallStep().dependOn(&install_art.step);
     }
 
-    // Bench exe
-    const bench = b.addExecutable(.{
-       .name = "basin-bench",
-       .root_source_file = b.path("tools/bench.zig"),
-       .target = target,
-       .optimize =.ReleaseFast,
-    });
-    bench.root_module.addImport("basin", basin_mod);
-    b.installArtifact(bench);
+    const test_step = b.step("test", "Run correctness tests");
+    test_step.dependOn(&b.addRunArtifact(tests).step);
+
+    // === STEP 3/6 BENCH ===
+    const bench_cmd = b.addRunArtifact(exe);
+    bench_cmd.step.dependOn(b.getInstallStep());
+    bench_cmd.addArgs(&.{ "--bench", "--threads", "4" });
+    const bench_step = b.step("bench", "Run ReleaseFast benchmark with 4 threads");
+    bench_step.dependOn(&bench_cmd.step);
 }
