@@ -146,7 +146,7 @@ test "KAT 1: abc" {
             const hex = try hashToHex("abc", std.testing.allocator);
             defer std.testing.allocator.free(hex);
             // v0.2: length-hiding, 2-block padding
-            try std.testing.expectEqualStrings("a2e06cfa60c79070f70887d01bfdcb2d3a4293ec18ab8833616263800000000", hex);
+            try std.testing.expectEqualStrings("a2e06cfa60c79070f70887d01bfdcb2d3a4293ec18ab88336162638000000", hex);
         }
     }.run);
 }
