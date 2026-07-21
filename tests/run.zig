@@ -1,5 +1,6 @@
 const std = @import("std");
 const basin = @import("basin");
+const build_config = @import("build_config"); // <-- ADD THIS LINE 1
 const prng = std.Random.DefaultPrng;
 
 fn withBasin(test_fn: fn () anyerror!void)!void {
@@ -186,6 +187,8 @@ test "STREAM: matches one-shot" {
 }
 
 test "BENCH: speed vs sha256" {
+    if (build_config.skip_heavy) return error.SkipZigTest; // <-- ADD THIS LINE 2
+
     try withBasin(struct {
         fn run()!void {
             const allocator = std.testing.allocator;
