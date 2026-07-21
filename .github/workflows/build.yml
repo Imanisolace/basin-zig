@@ -67,14 +67,8 @@ jobs:
       - name: Build Example ReleaseFast
         run: zig build -Doptimize=ReleaseFast
 
-      - name: Build Test Binary ReleaseFast
-        run: zig build test -Doptimize=ReleaseFast
-
-      - name: Find and Valgrind Test
-        run: |
-          BIN=$(ls zig-cache/o/*/test | head -n1)
-          echo "Found test binary: $BIN"
-          valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 $BIN
+      - name: Run Tests with Valgrind
+        run: zig build test -Doptimize=ReleaseFast --test-cmd "valgrind" --test-cmd "--leak-check=full" --test-cmd "--show-leak-kinds=all" --test-cmd "--error-exitcode=1"
 
       - name: Valgrind Example
         run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
