@@ -139,14 +139,14 @@ test "EDGE: block boundaries 23,24,25" {
     }.run);
 }
 
-// === NEW SQA TESTS ===
-
+// === UPDATED KAT TESTS FOR v0.2 ===
 test "KAT 1: abc" {
     try withBasin(struct {
         fn run()!void {
             const hex = try hashToHex("abc", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            try std.testing.expectEqualStrings("926004b8006452630ea03001977ac60814a001cca62f56086162638000000000", hex);
+            // v0.2: length-hiding, 2-block padding
+            try std.testing.expectEqualStrings("a2e06cfa60c79070f70887d01bfdcb2d3a4293ec18ab88336162638000000", hex);
         }
     }.run);
 }
@@ -156,7 +156,8 @@ test "KAT 2: long input" {
         fn run()!void {
             const hex = try hashToHex("The quick brown fox jumps over the lazy dog", std.testing.allocator);
             defer std.testing.allocator.free(hex);
-            try std.testing.expectEqualStrings("619c49e163bd7a867e1f872adcf6a02946bffa869936292f73206f7665722074", hex);
+            // v0.2: length-hiding, 2-block padding
+            try std.testing.expectEqualStrings("bfbd5749de09ea16fa18210401ca70ca0d42b657a3dad6bc73206f7665722074", hex);
         }
     }.run);
 }
