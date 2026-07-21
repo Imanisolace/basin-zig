@@ -45,8 +45,6 @@ jobs:
         run: zig build test -Doptimize=ReleaseFast --summary all
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
-          CFLAGS: -fsanitize=address -fno-omit-frame-pointer
-          LDFLAGS: -fsanitize=address
 
   valgrind:
     runs-on: ubuntu-latest
@@ -64,11 +62,11 @@ jobs:
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
-      - name: Build Example ReleaseFast
-        run: zig build -Doptimize=ReleaseFast
+      - name: Build Artifacts for Valgrind
+        run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true
 
       - name: Run Tests with Valgrind
-        run: zig build test -Doptimize=ReleaseFast --test-cmd "valgrind" --test-cmd "--leak-check=full" --test-cmd "--show-leak-kinds=all" --test-cmd "--error-exitcode=1"
+        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 ./zig-out/bin/basin-test
 
       - name: Valgrind Example
-        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
+        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 ./zig-out/bin/basin-example "valgrind check"
