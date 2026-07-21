@@ -3,7 +3,8 @@
 #include <string.h>
 #include <stdint.h>
 
-#define BLOCK_SIZE 24 // RATE * 8
+#define BLOCK_SIZE BASIN_POSEIDON_BLOCK_SIZE
+#define WIDTH BASIN_POSEIDON_WIDTH
 
 static inline uint64_t sbox(uint64_t x) {
     uint64_t x2 = x * x;
@@ -11,16 +12,16 @@ static inline uint64_t sbox(uint64_t x) {
     return x4 * x; // x^5
 }
 
-static void mds_mul(uint64_t s[POSEIDON_WIDTH]) {
+static void mds_mul(uint64_t s[WIDTH]) {
     uint64_t t0 = s[0] + s[1] + s[2];
     uint64_t t1 = s[0] + s[1]*2 + s[2]*3;
     uint64_t t2 = s[0] + s[1]*4 + s[2]*9;
     s[0] = t0; s[1] = t1; s[2] = t2;
 }
 
-static void poseidon_permute(uint64_t s[POSEIDON_WIDTH]) {
+static void poseidon_permute(uint64_t s[WIDTH]) {
     for(int r = 0; r < POSEIDON_ROUNDS; r++) {
-        int off = r * POSEIDON_WIDTH;
+        int off = r * WIDTH;
         s[0] += POSEIDON_RC[off + 0];
         s[1] += POSEIDON_RC[off + 1];
         s[2] += POSEIDON_RC[off + 2];
@@ -36,7 +37,7 @@ static void poseidon_permute(uint64_t s[POSEIDON_WIDTH]) {
     }
 }
 
-static void absorb_block(uint64_t s[POSEIDON_WIDTH], const uint8_t block[BLOCK_SIZE]) {
+static void absorb_block(uint64_t s[WIDTH], const uint8_t block[BLOCK_SIZE]) {
     uint64_t w0, w1;
     memcpy(&w0, block, 8);
     memcpy(&w1, block + 8, 8);
@@ -47,7 +48,7 @@ static void absorb_block(uint64_t s[POSEIDON_WIDTH], const uint8_t block[BLOCK_S
 
 int basin_hasher_init(basin_hasher_t* h) {
     if (!h) return -1;
-    memset(h, 0, sizeof(*h));
+    memset(h, 0, sizeof(*h)); // <-- critical: zero state
     return 0;
 }
 
@@ -71,17 +72,21 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
-    // 10*1 padding
+    // 10*1 padding: 0x01... 0x80
     h->buffer[h->buf_len] = 0x01;
-    memset(h->buffer + h->buf_len + 1, 0, BLOCK_SIZE - h->buf_len - 1);
+    if (h->buf_len + 1 < BLOCK_SIZE) {
+        memset(h->buffer + h->buf_len + 1, 0, BLOCK_SIZE - h->buf_len - 1);
+    }
+    h->buffer[BLOCK_SIZE - 1] |= 0x80; // set MSB of last byte
+
     absorb_block(h->state, h->buffer);
 
     // final permutation
     poseidon_permute(h->state);
 
-    // Squeeze: s0, s1 LE + 16 zeros = 32 bytes
-    for(int i = 0; i < 8; i++) out[i] = (h->state[0] >> (8*i)) & 0xff;
-    for(int i = 0; i < 8; i++) out[8+i] = (h->state[1] >> (8*i)) & 0xff;
+    // Squeeze 32 bytes LE: s0, s1, then 16 zeros
+    for(int i = 0; i < 8; i++) out[i] = (uint8_t)(h->state[0] >> (8*i));
+    for(int i = 0; i < 8; i++) out[8+i] = (uint8_t)(h->state[1] >> (8*i));
     memset(out + 16, 0, 16);
 
     memset(h, 0, sizeof(*h));
@@ -89,7 +94,7 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTE
 }
 
 int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output) {
-    if(!input ||!output || input_len == 0) return -1;
+    if(!input ||!output) return -1;
     basin_hasher_t h;
     basin_hasher_init(&h);
     basin_hasher_update(&h, input, input_len);
