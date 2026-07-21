@@ -27,9 +27,9 @@ pub fn init(cfg: BasinConfig)!void {
     }
 
     var c_cfg = c.BasinConfig{
-       .width = cfg.width,
-       .height = cfg.height,
-       .channels = cfg.channels,
+      .width = cfg.width,
+      .height = cfg.height,
+      .channels = cfg.channels,
     };
 
     if (c.basin_init(&c_cfg)!= 0) {
