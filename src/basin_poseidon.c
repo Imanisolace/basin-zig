@@ -125,16 +125,15 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
-    // 1. padding
+    // 1. padding: 0x80 then zeros in current buffer
     h->buffer[h->buf_len] = 0x80;
     memset(h->buffer + h->buf_len + 1, 0, BASIN_POSEIDON_BLOCK_SIZE - h->buf_len - 1);
+
+    // 2. absorb padded block: 1 permute
     absorb_block(h->state, h->buffer);
 
-    // 2. domain separator: absorb 1 zero block
+    // 3. absorb 1 zero block for domain sep: 2nd permute
     uint8_t zero_block[BASIN_POSEIDON_BLOCK_SIZE] = {0};
-    absorb_block(h->state, zero_block);
-
-    // 3. finalization: absorb another zero block
     absorb_block(h->state, zero_block);
 
     // 4. LE squeeze 32 bytes: s0, s1, s2, s0
