@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     const basin_mod = b.addModule("basin",.{
       .root_source_file = b.path("src/basin.zig"),
       .target = target,
-      .optimize = optimize,
+      ..optimize = optimize,
     });
     basin_mod.addIncludePath(b.path("include"));
 
@@ -59,10 +59,17 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("basin", basin_mod);
 
+    // ---- ADD THESE 4 LINES FOR VALGRIND ----
+    const install_tests = b.option(bool, "install-tests", "Install the test binary to zig-out/bin") orelse false;
+    if (install_tests) {
+        const install_art = b.addInstallArtifact(tests, .{ .dest_sub_path = "basin-test" });
+        b.getInstallStep().dependOn(&install_art.step);
+    }
+
     const test_step = b.step("test", "Run correctness tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
 
-    // === ADD THIS: STEP 3/6 BENCH ===
+    // === STEP 3/6 BENCH ===
     const bench_cmd = b.addRunArtifact(exe);
     bench_cmd.step.dependOn(b.getInstallStep());
     bench_cmd.addArgs(&.{ "--bench", "--threads", "4" });
