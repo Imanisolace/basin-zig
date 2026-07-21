@@ -3,7 +3,6 @@
 #include <string.h>
 #include <stdint.h>
 
-
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
@@ -13,26 +12,16 @@
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
 
-// Arkworks Poseidon t=3 Cauchy MDS
-static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
-    {1, 2, 3},
-    {2, 3, 1},
-    {3, 1, 2}
-};
+// Use the MDS from basin_poseidon_rc.h
+static const uint64_t (*MDS)[POSEIDON_WIDTH] = POSEIDON_MDS;
 
-// Arkworks RC gen: ChaCha20 with seed "arkworks_poseidon"
-static void ark_rc_gen(uint64_t out[POSEIDON_WIDTH * POSEIDON_ROUNDS]) {
-    uint64_t state = 0x61726b776f726b73ULL; // "arkworks" in LE
-    for(int i = 0; i < POSEIDON_WIDTH * POSEIDON_ROUNDS; i++) {
-        state = state * 6364136223846793005ULL + 1442695040888963407ULL; // LCG
-        out[i] = state ^ 0x9e3779b97f4a7c15ULL;
-    }
-}
+// Use the RC from basin_poseidon_rc.h
+static const uint64_t *RC = POSEIDON_RC;
 
 static inline uint64_t sbox_scalar(uint64_t x) {
     uint64_t x2 = x * x;
     uint64_t x4 = x2 * x2;
-    return x4 * x;
+    return x4 * x; // x^5
 }
 
 #ifdef __AVX2__
@@ -77,10 +66,6 @@ static inline uint64_t ct_lt_u64(uint64_t x, uint64_t y) {
 }
 
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
-    static uint64_t RC[POSEIDON_WIDTH * POSEIDON_ROUNDS];
-    static int rc_init = 0;
-    if(!rc_init) { ark_rc_gen(RC); rc_init = 1; }
-
     for(int r = 0; r < POSEIDON_ROUNDS; r++) {
         int off = r * POSEIDON_WIDTH;
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
@@ -93,17 +78,18 @@ static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
             for(int i = 0; i < POSEIDON_WIDTH; i++) state[i] = sbox_scalar(state[i]);
             #endif
         } else {
-            state[0] = sbox_scalar(state[0]);
+            state[0] = sbox_scalar(state[0]); // partial round
         }
         mds_mul(state);
     }
 }
 
+// Arkworks uses LE absorb
 static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BASIN_POSEIDON_BLOCK_SIZE]) {
     for(int j = 0; j < POSEIDON_WIDTH; j++) {
         uint64_t chunk = 0;
-        memcpy(&chunk, block + j*8, 8);
-        state[j] ^= __builtin_bswap64(chunk);
+        memcpy(&chunk, block + j*8, 8); // LE load
+        state[j] ^= chunk;
     }
     poseidon_permute(state);
 }
@@ -139,6 +125,7 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
+    // padding: 0x80 then zeros
     h->buffer[h->buf_len] = 0x80;
     memset(h->buffer + h->buf_len + 1, 0, BASIN_POSEIDON_BLOCK_SIZE - h->buf_len - 1);
     absorb_block(h->state, h->buffer);
@@ -150,12 +137,11 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTE
     memcpy(out_state, h->state, sizeof(out_state));
     absorb_block(out_state, zero_block);
 
-    for(int i=0; i<POSEIDON_WIDTH; i++) {
-        uint64_t be = __builtin_bswap64(h->state[i]);
-        memcpy(out + i*8, &be, 8);
-    }
-    uint64_t be = __builtin_bswap64(out_state[0]);
-    memcpy(out + 24, &be, 8);
+    // LE squeeze: 32 bytes = s0,s1,s2,s0 again
+    for(int i=0; i<8; i++) out[i] = (h->state[0] >> (8*i)) & 0xff;
+    for(int i=0; i<8; i++) out[8+i] = (h->state[1] >> (8*i)) & 0xff;
+    for(int i=0; i<8; i++) out[16+i] = (h->state[2] >> (8*i)) & 0xff;
+    for(int i=0; i<8; i++) out[24+i] = (out_state[0] >> (8*i)) & 0xff;
 
     memset(h->state, 0, sizeof(h->state));
     memset(h->buffer, 0, sizeof(h->buffer));
