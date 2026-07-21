@@ -5,6 +5,7 @@
 
 #define POSEIDON_WIDTH 3
 #define RATE 2
+#define BLOCK_SIZE 24
 
 static inline uint64_t sbox(uint64_t x) {
     uint64_t x2 = x*x; uint64_t x4 = x2*x2; return x4*x;
@@ -35,17 +36,19 @@ static void absorb(uint64_t s[3], const uint8_t b[24]) {
 int basin_hasher_init(basin_hasher_t* h){ memset(h,0,sizeof(*h)); return 0; }
 
 int basin_hasher_update(basin_hasher_t* h, const uint8_t* d, size_t n){
+    if(n==0) return -1; // match your zig test
     size_t i=0; while(i<n){
-        size_t c = 24 - h->buf_len;
+        size_t c = BLOCK_SIZE - h->buf_len;
         if(c > n-i) c = n-i;
         memcpy(h->buffer+h->buf_len, d+i, c);
         h->buf_len+=c; i+=c;
-        if(h->buf_len==24){ absorb(h->state, h->buffer); h->buf_len=0; }
+        if(h->buf_len==BLOCK_SIZE){ absorb(h->state, h->buffer); h->buf_len=0; }
     } return 0;
 }
 
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]){
-    h->buffer[h->buf_len]=0x80; memset(h->buffer+h->buf_len+1,0,23-h->buf_len);
+    h->buffer[h->buf_len]=0x01; // FIX: was 0x80, Basin uses 0x01
+    memset(h->buffer+h->buf_len+1,0,BLOCK_SIZE-h->buf_len-1);
     absorb(h->state, h->buffer);
     permute(h->state);
     for(int i=0;i<8;i++) out[i]=(h->state[0]>>(8*i))&0xff;
@@ -55,5 +58,6 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]){
 }
 
 int basin_poseidon_hash(const uint8_t* in, size_t n, uint8_t* out){
+    if(!in ||!out) return -1;
     basin_hasher_t h; basin_hasher_init(&h); basin_hasher_update(&h,in,n); return basin_hasher_final(&h,out);
 }
