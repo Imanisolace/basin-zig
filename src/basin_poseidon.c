@@ -2,6 +2,10 @@
 #include <string.h>
 #include <stdint.h>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#endif
+
 #define POSEIDON_WIDTH 3
 #define POSEIDON_RF 8
 #define POSEIDON_RP 57
@@ -17,6 +21,9 @@ static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
     {3, 1, 2}
 };
 
+// TODO: Replace with your real field prime. Using u64 max for now
+#define FIELD_MOD 0xFFFFFFFFFFFFFFFFULL
+
 // Deterministic PRNG for round constants. Matches HorizenLabs seed
 static uint64_t rc_gen(uint64_t seed) {
     seed ^= seed >> 12;
@@ -25,17 +32,39 @@ static uint64_t rc_gen(uint64_t seed) {
     return seed * 0x2545F4914F6CDD1DULL;
 }
 
-static inline uint64_t sbox(uint64_t x) {
+static inline uint64_t sbox_scalar(uint64_t x) {
     uint64_t x2 = x * x;
     uint64_t x4 = x2 * x2;
     return x4 * x; // x^5
 }
+
+#ifdef __AVX2__
+static inline __m256i vmul_mod(__m256i a, __m256i b) {
+    // v0.2.0: 4x scalar mul + mod. Replace with 128bit barrett later
+    uint64_t A[4], B[4], R[4];
+    _mm256_storeu_si256((__m256i*)A, a);
+    _mm256_storeu_si256((__m256i*)B, b);
+    for(int i=0;i<4;i++) R[i] = (A[i] * B[i]) % FIELD_MOD;
+    return _mm256_loadu_si256((__m256i*)R);
+}
+
+static void sbox_avx2(uint64_t state[POSEIDON_WIDTH]) {
+    uint64_t tmp[4] = {state[0], state[1], state[2], 0};
+    __m256i s = _mm256_loadu_si256((__m256i*)tmp);
+    __m256i s2 = vmul_mod(s, s);
+    __m256i s4 = vmul_mod(s2, s2);
+    __m256i s5 = vmul_mod(s4, s);
+    _mm256_storeu_si256((__m256i*)tmp, s5);
+    state[0]=tmp[0]; state[1]=tmp[1]; state[2]=tmp[2];
+}
+#endif
 
 static inline void mds_mul(uint64_t state[POSEIDON_WIDTH]) {
     uint64_t new_state[POSEIDON_WIDTH] = {0};
     for(int i = 0; i < POSEIDON_WIDTH; i++) {
         for(int j = 0; j < POSEIDON_WIDTH; j++) {
             new_state[i] += MDS[i][j] * state[j];
+            new_state[i] %= FIELD_MOD;
         }
     }
     memcpy(state, new_state, sizeof(new_state));
@@ -55,17 +84,22 @@ static inline uint64_t ct_lt_u64(uint64_t x, uint64_t y) {
 }
 
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
-    uint64_t seed = 0x123456789abcdef0ULL; // domain separator
+    uint64_t seed = 0x123456789abcdef0ULL;
     for(int r = 0; r < POSEIDON_ROUNDS; r++) {
         // Add round constants
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
             state[i] += rc_gen(seed + r*POSEIDON_WIDTH + i);
+            state[i] %= FIELD_MOD;
         }
         // S-boxes: full rounds vs partial
         if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) {
-            for(int i = 0; i < POSEIDON_WIDTH; i++) state[i] = sbox(state[i]);
+            #ifdef __AVX2__
+            sbox_avx2(state);
+            #else
+            for(int i = 0; i < POSEIDON_WIDTH; i++) state[i] = sbox_scalar(state[i]);
+            #endif
         } else {
-            state[0] = sbox(state[0]); // partial round
+            state[0] = sbox_scalar(state[0]);
         }
         // MDS
         mds_mul(state);
@@ -109,7 +143,7 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
     return 0;
 }
 
-// FIXED: Always outputs 32 deterministic bytes
+// FIXED: Outputs full 32 bytes
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
@@ -122,13 +156,14 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTE
     uint8_t zero_block[BASIN_POSEIDON_BLOCK_SIZE] = {0};
     absorb_block(h->state, zero_block);
 
-    // Squeeze: We have 24 bytes from state. Need 32.
-    // Do one more permutation to get 8 more bytes
-    absorb_block(h->state, zero_block); // extra squeeze
+    // SQUEEZE: Need 32 bytes. We have 24. Do 1 more permute
+    uint64_t out_state[POSEIDON_WIDTH];
+    memcpy(out_state, h->state, sizeof(out_state));
+    absorb_block(out_state, zero_block);
 
-    // Copy 24 bytes + zero pad last 8 bytes to be explicit
-    memset(out, 0, BASIN_POSEIDON_OUTPUT_BYTES);
-    memcpy(out, h->state, POSEIDON_WIDTH * 8); // 24 bytes
+    // Copy 24 + 8 = 32 bytes
+    memcpy(out, h->state, POSEIDON_WIDTH * 8);
+    memcpy(out + 24, out_state, 8);
 
     // Secure wipe
     memset(h->state, 0, sizeof(h->state));
