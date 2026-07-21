@@ -8,47 +8,29 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Zig 0.13.0
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
-
-      - name: Build
-        run: zig build --summary all
-
-      - name: Test - Vectors + Properties
-        run: zig build test --summary all
-
-      - name: Run Example - Smoke
-        run: zig build run -- "ci smoke run"
-
-      - name: Run Bench + Threads - Stress
-        run: zig build bench -Doptimize=ReleaseFast -- "ci stress run"
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with: { version: 0.13.0 }
+      - run: zig build --summary all
+      - run: zig build test --summary all
+      - run: zig build run -- "ci smoke run"
+      - run: zig build bench -Doptimize=ReleaseFast -- "ci stress run"
 
   asan:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: build
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Zig 0.13.0
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
-
-      - name: Test ReleaseFast with ASAN
-        run: zig build test -Doptimize=ReleaseFast --summary all
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with: { version: 0.13.0 }
+      - run: zig build test -Doptimize=ReleaseFast --summary all
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           CFLAGS: -fsanitize=address -fno-omit-frame-pointer
           LDFLAGS: -fsanitize=address
 
-    valgrind:
+  valgrind:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
@@ -58,9 +40,6 @@ jobs:
         with: { version: 0.13.0 }
       - run: sudo apt-get update && sudo apt-get install -y valgrind
       - run: zig build -Doptimize=ReleaseFast
-      - name: Build Test Binary ReleaseFast
-        run: zig build test -Doptimize=ReleaseFast -femit-bin=zig-out/bin/test
-      - name: Valgrind Tests
-        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/test
-      - name: Valgrind Example
-        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
+      - run: zig build test -Doptimize=ReleaseFast -femit-bin=zig-out/bin/test
+      - run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/test
+      - run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
