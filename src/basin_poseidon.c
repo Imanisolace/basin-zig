@@ -11,15 +11,17 @@
 #define POSEIDON_RF 8
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
-#define RATE 2 // Basin uses rate=2, capacity=1
 
+// Use the MDS from basin_poseidon_rc.h
 static const uint64_t (*MDS)[POSEIDON_WIDTH] = POSEIDON_MDS;
+
+// Use the RC from basin_poseidon_rc.h
 static const uint64_t *RC = POSEIDON_RC;
 
 static inline uint64_t sbox_scalar(uint64_t x) {
     uint64_t x2 = x * x;
     uint64_t x4 = x2 * x2;
-    return x4 * x;
+    return x4 * x; // x^5
 }
 
 #ifdef __AVX2__
@@ -76,16 +78,17 @@ static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
             for(int i = 0; i < POSEIDON_WIDTH; i++) state[i] = sbox_scalar(state[i]);
             #endif
         } else {
-            state[0] = sbox_scalar(state[0]);
+            state[0] = sbox_scalar(state[0]); // partial round
         }
         mds_mul(state);
     }
 }
 
+// Arkworks uses LE absorb into all 3 lanes
 static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BASIN_POSEIDON_BLOCK_SIZE]) {
-    for(int j = 0; j < RATE; j++) { // Only absorb first 2 lanes = rate
+    for(int j = 0; j < POSEIDON_WIDTH; j++) { // FIX 1: absorb all 3, not just 2
         uint64_t chunk = 0;
-        memcpy(&chunk, block + j*8, 8);
+        memcpy(&chunk, block + j*8, 8); // LE load
         state[j] ^= chunk;
     }
     poseidon_permute(state);
@@ -122,19 +125,19 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
-    // 1. pad and absorb
+    // 1. padding: 0x80 then zeros
     h->buffer[h->buf_len] = 0x80;
     memset(h->buffer + h->buf_len + 1, 0, BASIN_POSEIDON_BLOCK_SIZE - h->buf_len - 1);
     absorb_block(h->state, h->buffer);
 
-    // 2. 1 more permute for domain sep
+    // 2. 1 more permute for domain separation
     poseidon_permute(h->state);
 
-    // 3. Squeeze 32 bytes from rate lanes only: s0,s1,s0,s1
+    // 3. FIX 2: Squeeze s0,s1,s2 then pad 8 zeros to make 32 bytes
     for(int i=0; i<8; i++) out[i] = (h->state[0] >> (8*i)) & 0xff;
     for(int i=0; i<8; i++) out[8+i] = (h->state[1] >> (8*i)) & 0xff;
-    for(int i=0; i<8; i++) out[16+i] = (h->state[0] >> (8*i)) & 0xff;
-    for(int i=0; i<8; i++) out[24+i] = (h->state[1] >> (8*i)) & 0xff;
+    for(int i=0; i<8; i++) out[16+i] = (h->state[2] >> (8*i)) & 0xff;
+    memset(out + 24, 0, 8); // pad
 
     memset(h->state, 0, sizeof(h->state));
     memset(h->buffer, 0, sizeof(h->buffer));
