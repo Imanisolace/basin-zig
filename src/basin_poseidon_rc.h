@@ -1,8 +1,17 @@
 #pragma once
 #include <stdint.h>
+
+#define POSEIDON_WIDTH 3
 #define POSEIDON_RF 8
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS 65
+#define RATE 2
+
+static const uint64_t POSEIDON_MDS[3][3] = {
+    {1ULL, 1ULL, 1ULL},
+    {1ULL, 2ULL, 3ULL},
+    {1ULL, 4ULL, 9ULL}
+};
 
 static const uint64_t POSEIDON_RC[195] = {
 0x8a3e8f3b1c2d4e5f,0x9b4f9f4c2d3e5f60,0xac509f5d3e4f6071,0xbd610fae4f506172,0xce721fbf50627183,0xdf832fc061738294,0xe0943fd1728493a5,0xf1a54fe28395a4b6,
