@@ -3,13 +3,14 @@
 #include <stdint.h>
 
 #define POSEIDON_WIDTH 3
-#define POSEIDON_OUTPUT_BYTES BASIN_POSEIDON_OUTPUT_BYTES
-#define BASIN_POSEIDON_BLOCK_SIZE BASIN_POSEIDON_BLOCK_SIZE
 #define POSEIDON_RF 8
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
 
-// Simple MDS for demo. Replace with official HorizenLabs MDS for prod
+// basin.h already defines:
+// #define BASIN_POSEIDON_BLOCK_SIZE 24
+// #define BASIN_POSEIDON_OUTPUT_BYTES 32
+
 static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
     {2, 3, 1},
     {1, 2, 3},
