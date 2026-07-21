@@ -48,30 +48,19 @@ jobs:
           CFLAGS: -fsanitize=address -fno-omit-frame-pointer
           LDFLAGS: -fsanitize=address
 
-  valgrind:
+    valgrind:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: build
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Zig 0.13.0
-        uses: mlugg/setup-zig@v1
-        with:
-          version: 0.13.0
-
-      - name: Install Valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
-
-      - name: Build Example ReleaseFast
-        run: zig build -Doptimize=ReleaseFast
-
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v1
+        with: { version: 0.13.0 }
+      - run: sudo apt-get update && sudo apt-get install -y valgrind
+      - run: zig build -Doptimize=ReleaseFast
       - name: Build Test Binary ReleaseFast
-        run: zig build test -Doptimize=ReleaseFast
-
+        run: zig build test -Doptimize=ReleaseFast -femit-bin=zig-out/bin/test
       - name: Valgrind Tests
         run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/test
-
       - name: Valgrind Example
         run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
