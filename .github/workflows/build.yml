@@ -28,4 +28,4 @@ jobs:
         run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true # <-- ADD -Dskip-heavy=true
 
       - name: Run Valgrind
-        run: valgrind --leak-check=full --error-exitcode=1./zig-out/bin/basin-test
+        run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
