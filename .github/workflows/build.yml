@@ -70,12 +70,8 @@ jobs:
       - name: Build Test Binary ReleaseFast
         run: zig build test -Doptimize=ReleaseFast
 
-      - name: Find Test Binary
-        id: find
-        run: echo "BIN=$(find zig-out -name 'test' -type f | head -n1)" >> $GITHUB_OUTPUT
-
       - name: Valgrind Tests
-        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 ${{ steps.find.outputs.BIN }}
+        run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/test
 
       - name: Valgrind Example
         run: valgrind --leak-check=full --show-leak-kinds=all --error-exitcode=1 zig-out/bin/basin-example "valgrind check"
