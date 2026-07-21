@@ -51,7 +51,7 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator)![]u8 {
 
     var out_stack: [32]u8 = undefined; // stack: no leak, no errdefer
     const rc = c.basin_poseidon_hash(input.ptr, input.len, &out_stack);
-    if (rc!= 0) {
+    if (rc != 0) {
         return BasinError.HashFailed;
     }
 
