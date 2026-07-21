@@ -1,6 +1,8 @@
+#include "basin_poseidon_rc.h"
 #include "basin.h"
 #include <string.h>
 #include <stdint.h>
+
 
 #ifdef __AVX2__
 #include <immintrin.h>
