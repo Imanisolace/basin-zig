@@ -59,10 +59,11 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("basin", basin_mod);
 
-    // ---- ADD THIS FOR VALGRIND SKIP ----
-    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false; // <-- ADD
-    tests.root_module.addAnonymousImport("build_config", .{ // <-- ADD
-        .root_source_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};", .{skip_heavy})).getPath() // <-- ADD
+    // ---- FIX FOR ZIG 0.14: VALGRIND SKIP FLAG ----
+    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
+    const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};", .{skip_heavy}));
+    tests.root_module.addAnonymousImport("build_config", .{
+        .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
 
     // ---- VALGRIND SUPPORT: Install test binary to zig-out/bin/basin-test ----
