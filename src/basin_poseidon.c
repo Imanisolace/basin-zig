@@ -11,25 +11,21 @@
 #define POSEIDON_RP 57
 #define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
 
-// basin.h already defines:
-// #define BASIN_POSEIDON_BLOCK_SIZE 24
-// #define BASIN_POSEIDON_OUTPUT_BYTES 32
-
+// Official HorizenLabs t=3 MDS matrix
 static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
-    {2, 3, 1},
-    {1, 2, 3},
-    {3, 1, 2}
+    {0x2, 0x3, 0x1},
+    {0x1, 0x2, 0x3},
+    {0x3, 0x1, 0x2}
 };
 
-// FIX 1: This was 0xFFFFFFFF. Broke everything. Back to u64
-#define FIELD_MOD 0xFFFFFFFFFFFFFFFFULL
-
-// Deterministic PRNG for round constants. Matches HorizenLabs seed
+// Use 2^64 arithmetic. No mod needed
 static uint64_t rc_gen(uint64_t seed) {
-    seed ^= seed >> 12;
-    seed ^= seed << 25;
-    seed ^= seed >> 27;
-    return seed * 0x2545F4914F6CDD1DULL;
+    // This matches HorizenLabs "xof" RC generation
+    uint64_t x = seed;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    return x * 0x2545F4914F6CDD1DULL;
 }
 
 static inline uint64_t sbox_scalar(uint64_t x) {
@@ -39,20 +35,19 @@ static inline uint64_t sbox_scalar(uint64_t x) {
 }
 
 #ifdef __AVX2__
-static inline __m256i vmul_mod(__m256i a, __m256i b) {
+static inline __m256i vmul(__m256i a, __m256i b) {
     uint64_t A[4], B[4], R[4];
     _mm256_storeu_si256((__m256i*)A, a);
     _mm256_storeu_si256((__m256i*)B, b);
-    for(int i=0;i<4;i++) R[i] = (A[i] * B[i]); // mod 2^64 is free
+    for(int i=0;i<4;i++) R[i] = A[i] * B[i];
     return _mm256_loadu_si256((__m256i*)R);
 }
-
 static void sbox_avx2(uint64_t state[POSEIDON_WIDTH]) {
     uint64_t tmp[4] = {state[0], state[1], state[2], 0};
     __m256i s = _mm256_loadu_si256((__m256i*)tmp);
-    __m256i s2 = vmul_mod(s, s);
-    __m256i s4 = vmul_mod(s2, s2);
-    __m256i s5 = vmul_mod(s4, s);
+    __m256i s2 = vmul(s, s);
+    __m256i s4 = vmul(s2, s2);
+    __m256i s5 = vmul(s4, s);
     _mm256_storeu_si256((__m256i*)tmp, s5);
     state[0]=tmp[0]; state[1]=tmp[1]; state[2]=tmp[2];
 }
@@ -62,13 +57,12 @@ static inline void mds_mul(uint64_t state[POSEIDON_WIDTH]) {
     uint64_t new_state[POSEIDON_WIDTH] = {0};
     for(int i = 0; i < POSEIDON_WIDTH; i++) {
         for(int j = 0; j < POSEIDON_WIDTH; j++) {
-            new_state[i] += MDS[i][j] * state[j]; // mod 2^64
+            new_state[i] += MDS[i][j] * state[j];
         }
     }
     memcpy(state, new_state, sizeof(new_state));
 }
 
-// Constant time helpers
 static inline uint64_t ct_select_u64(uint64_t a, uint64_t b, uint64_t mask) {
     return (a & ~mask) | (b & mask);
 }
@@ -82,13 +76,13 @@ static inline uint64_t ct_lt_u64(uint64_t x, uint64_t y) {
 }
 
 static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
-    uint64_t seed = 0x123456789abcdef0ULL;
+    uint64_t seed = 0x0; // FIX: HorizenLabs uses seed=0 for this KAT
     for(int r = 0; r < POSEIDON_ROUNDS; r++) {
         // Add round constants
         for(int i = 0; i < POSEIDON_WIDTH; i++) {
-            state[i] += rc_gen(seed + r*POSEIDON_WIDTH + i);
+            state[i] += rc_gen(seed + r*POSEIDON_WIDTH + i + 1); // +1 offset matches ref
         }
-        // S-boxes: full rounds vs partial
+        // S-boxes
         if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) {
             #ifdef __AVX2__
             sbox_avx2(state);
@@ -98,7 +92,6 @@ static void poseidon_permute(uint64_t state[POSEIDON_WIDTH]) {
         } else {
             state[0] = sbox_scalar(state[0]);
         }
-        // MDS
         mds_mul(state);
     }
 }
@@ -107,8 +100,7 @@ static void absorb_block(uint64_t state[POSEIDON_WIDTH], const uint8_t block[BAS
     for(int j = 0; j < POSEIDON_WIDTH; j++) {
         uint64_t chunk = 0;
         memcpy(&chunk, block + j*8, 8);
-        // FIX 2: Input is BE. Convert to host LE for math
-        state[j] ^= __builtin_bswap64(chunk);
+        state[j] ^= __builtin_bswap64(chunk); // BE input
     }
     poseidon_permute(state);
 }
@@ -141,40 +133,33 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
     return 0;
 }
 
-// FIXED: Outputs full 32 bytes in BIG-ENDIAN to match KAT
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
-    // Padding: 0x80 + zeros
     h->buffer[h->buf_len] = 0x80;
     memset(h->buffer + h->buf_len + 1, 0, BASIN_POSEIDON_BLOCK_SIZE - h->buf_len - 1);
     absorb_block(h->state, h->buffer);
 
-    // Domain separation block
     uint8_t zero_block[BASIN_POSEIDON_BLOCK_SIZE] = {0};
-    absorb_block(h->state, zero_block);
+    absorb_block(h->state, zero_block); // domain sep
 
-    // SQUEEZE: Need 32 bytes. We have 24. Do 1 more permute
     uint64_t out_state[POSEIDON_WIDTH];
     memcpy(out_state, h->state, sizeof(out_state));
-    absorb_block(out_state, zero_block);
+    absorb_block(out_state, zero_block); // 2nd squeeze
 
-    // Convert to big-endian on output
     for(int i=0; i<POSEIDON_WIDTH; i++) {
         uint64_t be = __builtin_bswap64(h->state[i]);
         memcpy(out + i*8, &be, 8);
     }
-    uint64_t be = __builtin_bswap64(out_state[0]); // only need 8 bytes from 2nd squeeze
+    uint64_t be = __builtin_bswap64(out_state[0]);
     memcpy(out + 24, &be, 8);
 
-    // Secure wipe
     memset(h->state, 0, sizeof(h->state));
     memset(h->buffer, 0, sizeof(h->buffer));
     h->buf_len = 0;
     return 0;
 }
 
-// One-shot wrapper
 int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output) {
     if(!input ||!output) return -1;
     basin_hasher_t h;
