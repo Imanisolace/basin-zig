@@ -97,11 +97,15 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]) {
     uint8_t zero_block[BASIN_POSEIDON_BLOCK_SIZE] = {0};
     absorb_block(h->state, zero_block); // block 2
 
-    memcpy(out, h->state, POSEIDON_OUTPUT_BYTES);
+    // FIX: state is 24 bytes but we need 32 byte output. Pad with 8 zeros
+    uint8_t tmp[POSEIDON_OUTPUT_BYTES] = {0};
+    memcpy(tmp, h->state, POSEIDON_WIDTH * 8); // 24 bytes
+    memcpy(out, tmp, POSEIDON_OUTPUT_BYTES); // 32 bytes
 
     // Scrub
     memset(h->state, 0, sizeof(h->state));
     memset(h->buffer, 0, sizeof(h->buffer));
+    memset(tmp, 0, sizeof(tmp));
     h->buf_len = 0;
     return 0;
 }
