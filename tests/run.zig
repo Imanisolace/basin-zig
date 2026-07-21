@@ -204,7 +204,8 @@ test "STREAM: matches one-shot" {
 
 test "BENCH: speed vs sha256" {
     if (build_config.skip_heavy) return error.SkipZigTest;
-    if (std.builtin.mode != .ReleaseFast and std.builtin.mode != .ReleaseSafe) {
+    // FIX FOR ZIG 0.14: mode -> optimize_mode
+    if (std.builtin.optimize_mode != .ReleaseFast and std.builtin.optimize_mode != .ReleaseSafe) {
         std.debug.print("\n Skip: Run with -Doptimize=ReleaseFast for bench\n",.{});
         return;
     }
