@@ -1,24 +1,19 @@
 #include "basin_poseidon_rc.h"
 #include "basin.h"
 #include <string.h>
-#include <stdint.h>
 
-#define POSEIDON_WIDTH 3
-#define RATE 2
 #define BLOCK_SIZE 24
 
-static inline uint64_t sbox(uint64_t x) {
-    uint64_t x2 = x*x; uint64_t x4 = x2*x2; return x4*x;
-}
+static inline uint64_t sbox(uint64_t x){ uint64_t x2=x*x; return x2*x2*x; }
 
-static void mds_mul(uint64_t s[3]) {
-    uint64_t t0 = s[0] + s[1] + s[2];
-    uint64_t t1 = s[0] + s[1]*2 + s[2]*3;
-    uint64_t t2 = s[0] + s[1]*4 + s[2]*9;
+static void mds_mul(uint64_t s[3]){
+    uint64_t t0=s[0]+s[1]+s[2];
+    uint64_t t1=s[0]+s[1]*2+s[2]*3;
+    uint64_t t2=s[0]+s[1]*4+s[2]*9;
     s[0]=t0; s[1]=t1; s[2]=t2;
 }
 
-static void permute(uint64_t s[3]) {
+static void permute(uint64_t s[3]){
     for(int r=0;r<POSEIDON_ROUNDS;r++){
         s[0]+=POSEIDON_RC[r*3+0]; s[1]+=POSEIDON_RC[r*3+1]; s[2]+=POSEIDON_RC[r*3+2];
         if(r<4 || r>=4+POSEIDON_RP){ s[0]=sbox(s[0]); s[1]=sbox(s[1]); s[2]=sbox(s[2]); }
@@ -27,16 +22,16 @@ static void permute(uint64_t s[3]) {
     }
 }
 
-static void absorb(uint64_t s[3], const uint8_t b[24]) {
+static void absorb(uint64_t s[3], const uint8_t b[24]){
     uint64_t w0,w1; memcpy(&w0,b,8); memcpy(&w1,b+8,8);
-    s[0]^=w0; s[1]^=w1; // RATE=2
+    s[0]^=w0; s[1]^=w1;
     permute(s);
 }
 
 int basin_hasher_init(basin_hasher_t* h){ memset(h,0,sizeof(*h)); return 0; }
 
 int basin_hasher_update(basin_hasher_t* h, const uint8_t* d, size_t n){
-    if(n==0) return -1; // match your zig test
+    if(n==0) return -1;
     size_t i=0; while(i<n){
         size_t c = BLOCK_SIZE - h->buf_len;
         if(c > n-i) c = n-i;
@@ -47,13 +42,13 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* d, size_t n){
 }
 
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]){
-    h->buffer[h->buf_len]=0x01; // FIX: was 0x80, Basin uses 0x01
+    h->buffer[h->buf_len]=0x01; // 10*1 padding
     memset(h->buffer+h->buf_len+1,0,BLOCK_SIZE-h->buf_len-1);
     absorb(h->state, h->buffer);
     permute(h->state);
     for(int i=0;i<8;i++) out[i]=(h->state[0]>>(8*i))&0xff;
     for(int i=0;i<8;i++) out[8+i]=(h->state[1]>>(8*i))&0xff;
-    memset(out+16,0,16); // 2 lanes + 16 zeros = 32 bytes
+    memset(out+16,0,16);
     memset(h,0,sizeof(*h)); return 0;
 }
 
