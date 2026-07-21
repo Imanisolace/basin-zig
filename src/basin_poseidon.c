@@ -22,7 +22,7 @@ static const uint64_t MDS[POSEIDON_WIDTH][POSEIDON_WIDTH] = {
 };
 
 // TODO: Replace with your real field prime. Using u64 max for now
-#define FIELD_MOD 0xFFFFFFFFFFFFFFFFULL
+#define FIELD_MOD 0xFFFFFFFFULL
 
 // Deterministic PRNG for round constants. Matches HorizenLabs seed
 static uint64_t rc_gen(uint64_t seed) {
@@ -143,7 +143,7 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
     return 0;
 }
 
-// FIXED: Outputs full 32 bytes
+// FIXED: Outputs full 32 bytes in BIG-ENDIAN to match KAT
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
@@ -161,9 +161,13 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTE
     memcpy(out_state, h->state, sizeof(out_state));
     absorb_block(out_state, zero_block);
 
-    // Copy 24 + 8 = 32 bytes
-    memcpy(out, h->state, POSEIDON_WIDTH * 8);
-    memcpy(out + 24, out_state, 8);
+    // FIX: Convert to big-endian before copy
+    for(int i=0; i<POSEIDON_WIDTH; i++) {
+        uint64_t be = __builtin_bswap64(h->state[i]);
+        memcpy(out + i*8, &be, 8);
+    }
+    uint64_t be = __builtin_bswap64(out_state[0]); // only need 8 bytes from 2nd squeeze
+    memcpy(out + 24, &be, 8);
 
     // Secure wipe
     memset(h->state, 0, sizeof(h->state));
