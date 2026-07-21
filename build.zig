@@ -9,6 +9,7 @@ pub fn build(b: *std.Build) void {
 
     // SPEED: add flag for release builds
     const use_native = b.option(bool, "native", "Enable -march=native. Faster but not portable") orelse true;
+    const use_avx2 = b.option(bool, "avx2", "Force enable AVX2. Ignored if native=false") orelse true;
 
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
@@ -28,9 +29,19 @@ pub fn build(b: *std.Build) void {
     if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
         c_flags.append("-O3") catch @panic("OOM"); // was O2
         c_flags.append("-DNDEBUG") catch @panic("OOM"); // remove asserts
-        if (use_native) c_flags.append("-march=native") catch @panic("OOM");
+        c_flags.append("-ffast-math") catch @panic("OOM"); // new: faster fp math
+
+        if (use_native) {
+            c_flags.append("-march=native") catch @panic("OOM");
+        } else if (use_avx2) {
+            // Explicit AVX2 if not using native
+            c_flags.append("-mavx2") catch @panic("OOM");
+            c_flags.append("-mfma") catch @panic("OOM");
+            c_flags.append("-D__AVX2__") catch @panic("OOM"); // so our #ifdef works
+        }
     } else {
         c_flags.append("-O2") catch @panic("OOM"); // debug
+        c_flags.append("-D__AVX2__") catch @panic("OOM"); // still define for debug builds
     }
 
     if (constant_time) {
@@ -40,7 +51,7 @@ pub fn build(b: *std.Build) void {
     const c_files = &.{ 
         "src/basin_config.c", 
         "src/basin_init.c", 
-        "src/basin_poseidon.c", 
+        "src/basin_poseidon.c", // <- your updated file with AVX2 inside
         "src/basin_parallel.c" 
     };
 
