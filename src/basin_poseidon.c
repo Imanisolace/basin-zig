@@ -10,7 +10,6 @@
 #define POSEIDON_WIDTH 3
 #define POSEIDON_RF 8
 #define POSEIDON_RP 57
-#define POSEIDON_ROUNDS (POSEIDON_RF + POSEIDON_RP)
 
 // Use the MDS from basin_poseidon_rc.h
 static const uint64_t (*MDS)[POSEIDON_WIDTH] = POSEIDON_MDS;
