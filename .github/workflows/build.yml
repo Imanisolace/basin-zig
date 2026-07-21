@@ -16,16 +16,19 @@ jobs:
 
   valgrind:
     runs-on: ubuntu-latest
+    needs: test  # <-- wait for test job to finish first
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.14.0
+          
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
       - name: Build Artifacts for Valgrind
-        run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true # <-- ADD -Dskip-heavy=true
+        run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true
 
       - name: Run Valgrind
         run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
+        #                                                    ^ space fixed here
