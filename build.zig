@@ -1,8 +1,6 @@
 const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
-    const p = 21888242871839275222246405745257275088548364400416034343698204186575808495617; // BN254 field
-
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
         var input: [13]u8 = undefined;
@@ -13,8 +11,8 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
         shake.update(&input);
         var out: [8]u8 = undefined;
         shake.final(&out);
-        var raw = std.mem.readInt(u64, &out,.little);
-        rc[i] = raw % p; // <- THIS IS THE FIX FOR CIRCOM
+        const raw = std.mem.readInt(u64, &out,.little); // const not var
+        rc[i] = raw; // NO MOD P HERE
     }
 
     std.debug.print("RC0: 0x{x:0>16}\n",.{rc[0]});
