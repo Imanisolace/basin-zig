@@ -33,11 +33,9 @@ pub fn build(b: *std.Build) void {
         c_flags.append("-DCONSTANT_TIME=1") catch @panic("OOM");
     }
 
-    // FIXED: removed basin_init.c
+    // PURE V0.1: Only the hasher
     const c_files = &.{
-        "src/basin_config.c",
-        "src/basin_poseidon.c",  // hasher now
-        "src/basin_parallel.c",
+        "src/basin_poseidon.c",
     };
 
     const exe = b.addExecutable(.{
@@ -48,7 +46,6 @@ pub fn build(b: *std.Build) void {
     });
     exe.addIncludePath(b.path("include"));
     exe.linkLibC();
-    exe.linkSystemLibrary("pthread");
     exe.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
@@ -60,8 +57,7 @@ pub fn build(b: *std.Build) void {
     });
     tests.addIncludePath(b.path("include"));
     tests.linkLibC();
-    tests.linkSystemLibrary("pthread");
-    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items }); // uses same fixed c_files
+    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     tests.root_module.addImport("basin", basin_mod);
 
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
