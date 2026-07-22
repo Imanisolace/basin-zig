@@ -73,7 +73,7 @@ pub fn build(b: *std.Build) void {
        .name = "dumprc",
        .root_source_file = b.path("tools/dumprc.zig"),
        .target = target,
-       .optimize =.ReleaseSafe,
+       .optimize = .ReleaseSafe,
     });
     b.installArtifact(dumprc);
 
