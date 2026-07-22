@@ -14,7 +14,12 @@
 static inline uint64_t le64(const uint8_t* p){uint64_t x;memcpy(&x,p,8);return x;}
 static inline void st64(uint8_t* p,uint64_t x){for(int i=0;i<8;i++)p[i]=(uint8_t)(x>>(8*i));}
 static inline uint64_t pow5(uint64_t x){uint64_t x2=x*x;return x2*x2*x;}
-static inline void mds(uint64_t s[3]){uint64_t a=s[0]+s[1]+s[2];uint64_t b=s[0]+s[1]*2+s[2]*3;uint64_t c=s[0]+s[1]*4+s[2]*9;s[0]=a;s[1]=b;s[2]=c;}
+static inline void mds(uint64_t s[3]){
+    uint64_t a=s[0]*2 + s[1]*3 + s[2]*1;
+    uint64_t b=s[0]*1 + s[1]*2 + s[2]*3;
+    uint64_t c=s[0]*3 + s[1]*1 + s[2]*2;
+    s[0]=a; s[1]=b; s[2]=c;
+}
 static void perm(uint64_t s[3]){
     for(int r=0;r<ROUNDS;r++){
         int o=r*3;
@@ -25,7 +30,7 @@ static void perm(uint64_t s[3]){
     }
 }
 
-int basin_hasher_init(basin_hasher_t* h){ memset(h,0,sizeof(*h)); return 0; } // ZERO IV
+int basin_hasher_init(basin_hasher_t* h){ memset(h,0,sizeof(*h)); return 0; }
 
 int basin_hasher_update(basin_hasher_t* h,const uint8_t* d,size_t n){
     size_t i=0;
