@@ -9,7 +9,7 @@
 static inline uint64_t sbox(uint64_t x) {
     uint64_t x2 = x * x;
     uint64_t x4 = x2 * x2;
-    return x4 * x; // x^5
+    return x4 * x;
 }
 
 static void mds_mul(uint64_t s[WIDTH]) {
@@ -26,11 +26,11 @@ static void poseidon_permute(uint64_t s[WIDTH]) {
         s[1] += POSEIDON_RC[off + 1];
         s[2] += POSEIDON_RC[off + 2];
 
-        if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) { // full
+        if(r < POSEIDON_RF/2 || r >= POSEIDON_RF/2 + POSEIDON_RP) {
             s[0] = sbox(s[0]);
             s[1] = sbox(s[1]);
             s[2] = sbox(s[2]);
-        } else { // partial
+        } else {
             s[0] = sbox(s[0]);
         }
         mds_mul(s);
@@ -41,14 +41,14 @@ static void absorb_block(uint64_t s[WIDTH], const uint8_t block[BLOCK_SIZE]) {
     uint64_t w0, w1;
     memcpy(&w0, block, 8);
     memcpy(&w1, block + 8, 8);
-    s[0] ^= w0; // RATE = 2
+    s[0] ^= w0;
     s[1] ^= w1;
     poseidon_permute(s);
 }
 
 int basin_hasher_init(basin_hasher_t* h) {
     if (!h) return -1;
-    memset(h, 0, sizeof(*h)); // <-- critical: zero state
+    memset(h, 0, sizeof(*h)); // FIX 1: zero state
     return 0;
 }
 
@@ -72,19 +72,16 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
 
-    // 10*1 padding: 0x01... 0x80
+    // FIX 2: 10*1 padding
     h->buffer[h->buf_len] = 0x01;
     if (h->buf_len + 1 < BLOCK_SIZE) {
         memset(h->buffer + h->buf_len + 1, 0, BLOCK_SIZE - h->buf_len - 1);
     }
-    h->buffer[BLOCK_SIZE - 1] |= 0x80; // set MSB of last byte
+    h->buffer[BLOCK_SIZE - 1] |= 0x80;
 
     absorb_block(h->state, h->buffer);
-
-    // final permutation
     poseidon_permute(h->state);
 
-    // Squeeze 32 bytes LE: s0, s1, then 16 zeros
     for(int i = 0; i < 8; i++) out[i] = (uint8_t)(h->state[0] >> (8*i));
     for(int i = 0; i < 8; i++) out[8+i] = (uint8_t)(h->state[1] >> (8*i));
     memset(out + 16, 0, 16);
