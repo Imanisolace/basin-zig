@@ -2,7 +2,7 @@
 #define BASIN_POSEIDON_RC_H
 #include <stdint.h>
 
-// BasinPoseidon64 v0.1
+// BasinPoseidon64 
 // RCs = SHAKE256("BasinPoseidon64" || le64(i)) first 8 bytes
 static const uint64_t POSEIDON_RC[195] = {
 0x8f3a9c1d4e5b6a7fULL,0x1b2c3d4e5f607182ULL,0x9a8b7c6d5e4f3021ULL,
