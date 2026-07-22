@@ -13,7 +13,7 @@ fn isCI(allocator: std.mem.Allocator) bool {
 }
 
 fn log(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
-    if (isCI(allocator)) return; // Skip printing in CI to avoid FAULT crash
+    if (isCI(allocator)) return; 
     const stderr = std.io.getStdErr().writer();
     stderr.print(fmt, args) catch {};
 }
@@ -47,7 +47,7 @@ pub fn main()!void {
     log(allocator, "=== Basin Zig v0.1.0 ===\n",.{});
     log(allocator, "Input: '{s}'\n",.{cfg.data});
 
-    // Pure v0.1: No init, no config, no threads. Just hash
+    
     const hash_bytes = try basin.poseidonHash(cfg.data, allocator);
     defer allocator.free(hash_bytes);
     const hex = try basin.toHex(hash_bytes, allocator);
