@@ -87,7 +87,7 @@ pub fn build(b: *std.Build) void {
 
     c_flags.appendSlice(&.{ "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
 
-    if (optimize ==.ReleaseFast or optimize ==.ReleaseSafe) {
+    if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
         c_flags.append("-O3") catch @panic("OOM");
         c_flags.append("-DNDEBUG") catch @panic("OOM");
         c_flags.append("-ffast-math") catch @panic("OOM");
