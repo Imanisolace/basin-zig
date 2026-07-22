@@ -1,5 +1,24 @@
 const std = @import("std");
 
+fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
+    var rc: [195]u64 = undefined;
+    std.crypto.core.sha3.shake256("Basin Poseidon", std.mem.asBytes(&rc));
+
+    var buf = std.ArrayList(u8).init(b.allocator);
+    defer buf.deinit();
+    const w = buf.writer();
+
+    w.print("#ifndef BASIN_POSEIDON_RC_H\n#define BASIN_POSEIDON_RC_H\n#include <stdint.h>\n\nstatic const uint64_t POSEIDON_RC[195] = {{\n",.{}) catch @panic("OOM");
+    for (rc, 0..) |v, i| {
+        w.print("0x{x:0>16}ULL",.{v}) catch @panic("OOM");
+        if (i!= rc.len - 1) w.print(",",.{}) catch @panic("OOM");
+        if (i % 3 == 2) w.print("\n",.{}) catch @panic("OOM");
+    }
+    w.print("}};\n\n#endif // BASIN_POSEIDON_RC_H\n",.{}) catch @panic("OOM");
+
+    return b.addWriteFile("basin_poseidon_rc.h", buf.items);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -9,18 +28,22 @@ pub fn build(b: *std.Build) void {
     const use_avx2 = b.option(bool, "avx2", "Force enable AVX2. Ignored if native=false") orelse true;
 
     const basin_mod = b.addModule("basin",.{
-       .root_source_file = b.path("src/basin.zig"),
-       .target = target,
-       .optimize = optimize,
+      .root_source_file = b.path("src/basin.zig"),
+      .target = target,
+      .optimize = optimize,
     });
     basin_mod.addIncludePath(b.path("include"));
+
+    // Generate RC header at build time
+    const rc_header = generateRC(b);
+    basin_mod.addIncludePath(rc_header.getDirectory());
 
     var c_flags = std.ArrayList([]const u8).init(b.allocator);
     defer c_flags.deinit();
 
     c_flags.appendSlice(&.{ "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
 
-    if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
+    if (optimize ==.ReleaseFast or optimize ==.ReleaseSafe) {
         c_flags.append("-O3") catch @panic("OOM");
         c_flags.append("-DNDEBUG") catch @panic("OOM");
         c_flags.append("-ffast-math") catch @panic("OOM");
@@ -50,46 +73,27 @@ pub fn build(b: *std.Build) void {
 
     // ========== Example exe ==========
     const exe = b.addExecutable(.{
-       .name = "basin-example",
-       .root_source_file = b.path("examples/main.zig"),
-       .target = target,
-       .optimize = optimize,
+      .name = "basin-example",
+      .root_source_file = b.path("examples/main.zig"),
+      .target = target,
+      .optimize = optimize,
     });
     exe.addIncludePath(b.path("include"));
+    exe.addIncludePath(rc_header.getDirectory());
     exe.linkLibC();
     exe.linkSystemLibrary("pthread");
     exe.addCSourceFiles(.{.files = c_files,.flags = c_flags.items });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| { run_cmd.addArgs(args); }
-    const run_step = b.step("run", "Run the benchmark example");
-    run_step.dependOn(&run_cmd.step);
-
-    // ========== Dumprc tool to generate RC ==========
-    const dumprc = b.addExecutable(.{
-       .name = "dumprc",
-       .root_source_file = b.path("tools/dumprc.zig"),
-       .target = target,
-       .optimize = .ReleaseSafe,
-    });
-    b.installArtifact(dumprc);
-
-    const dumprc_run = b.addRunArtifact(dumprc);
-    dumprc_run.addArg(">");
-    dumprc_run.addArg("include/basin_poseidon_rc.h");
-    const dumprc_step = b.step("dumprc", "Generate basin_poseidon_rc.h");
-    dumprc_step.dependOn(&dumprc_run.step);
-
     // ========== Tests ==========
     const tests = b.addTest(.{
-       .root_source_file = b.path("tests/run.zig"),
-       .target = target,
-       .optimize = .ReleaseSafe,
+      .root_source_file = b.path("tests/run.zig"),
+      .target = target,
+      .optimize =.ReleaseSafe,
     });
     tests.addIncludePath(b.path("include"));
+    tests.addIncludePath(rc_header.getDirectory());
     tests.linkLibC();
     tests.linkSystemLibrary("pthread");
     tests.addCSourceFiles(.{.files = c_files,.flags = c_flags.items });
@@ -98,24 +102,9 @@ pub fn build(b: *std.Build) void {
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
     const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};",.{skip_heavy}));
     tests.root_module.addAnonymousImport("build_config",.{
-       .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
+      .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
 
-    const install_tests = b.option(bool, "install-tests", "Install the test binary to zig-out/bin") orelse false;
-    if (install_tests) {
-        const install_art = b.addInstallArtifact(tests,.{.dest_sub_path = "basin-test" });
-        b.getInstallStep().dependOn(&install_art.step);
-    }
-
     const test_step = b.step("test", "Run correctness tests");
-    const test_run = b.addRunArtifact(tests);
-    test_step.dependOn(&test_run.step);
-    test_step.dependOn(dumprc_step); // RC must be generated before tests
-
-    // ========== Bench ==========
-    const bench_cmd = b.addRunArtifact(exe);
-    bench_cmd.step.dependOn(b.getInstallStep());
-    bench_cmd.addArgs(&.{ "--bench", "--threads", "4" });
-    const bench_step = b.step("bench", "Run ReleaseFast benchmark with 4 threads");
-    bench_step.dependOn(&bench_cmd.step);
+    test_step.dependOn(&b.addRunArtifact(tests).step);
 }
