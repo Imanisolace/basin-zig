@@ -72,7 +72,7 @@ test "FUZZ: random bytes dont crash" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
     var i: usize = 0;
-    while (i < 100) : (i += 1) { // reduced for CI speed
+    while (i < 100) : (i += 1) { 
         const len = rng.random().intRangeAtMost(usize, 0, buf.len);
         rng.random().bytes(buf[0..len]);
         const hash = basin.poseidonHash(buf[0..len], allocator) catch continue;
@@ -84,7 +84,7 @@ test "FUZZ: random bytes dont crash" {
 test "BENCH: speed" {
     if (build_config.skip_heavy) return error.SkipZigTest;
     const allocator = std.testing.allocator;
-    const data = try allocator.alloc(u8, 1 * 1024 * 1024); // 1MB for CI
+    const data = try allocator.alloc(u8, 1 * 1024 * 1024); 
     defer allocator.free(data);
     std.crypto.random.bytes(data);
 
