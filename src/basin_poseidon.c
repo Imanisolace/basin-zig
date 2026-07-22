@@ -7,9 +7,7 @@
 #define WIDTH BASIN_POSEIDON_WIDTH
 
 static inline uint64_t sbox(uint64_t x) {
-    uint64_t x2 = x * x;
-    uint64_t x4 = x2 * x2;
-    return x4 * x;
+    return x * x * x * x * x; // x^5 mod 2^64
 }
 
 static void mds_mul(uint64_t s[WIDTH]) {
@@ -41,9 +39,8 @@ static void absorb_block(uint64_t s[WIDTH], const uint8_t block[BLOCK_SIZE]) {
     uint64_t w0, w1;
     memcpy(&w0, block, 8);
     memcpy(&w1, block + 8, 8);
-    s[0] ^= w0; // RATE = 2
+    s[0] ^= w0;
     s[1] ^= w1;
-    // NO PERMUTE HERE
 }
 
 int basin_hasher_init(basin_hasher_t* h) {
@@ -63,7 +60,7 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
         i += to_copy;
         if (h->buf_len == BLOCK_SIZE) {
             absorb_block(h->state, h->buffer);
-            poseidon_permute(h->state); // permute once per full block
+            poseidon_permute(h->state);
             h->buf_len = 0;
         }
     }
@@ -72,22 +69,16 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[BASIN_POSEIDON_OUTPUT_BYTES]) {
     if (!h ||!out) return -1;
-
-    // 10*1 padding
     h->buffer[h->buf_len] = 0x01;
     if (h->buf_len + 1 < BLOCK_SIZE) {
         memset(h->buffer + h->buf_len + 1, 0, BLOCK_SIZE - h->buf_len - 1);
     }
     h->buffer[BLOCK_SIZE - 1] |= 0x80;
-
     absorb_block(h->state, h->buffer);
-    poseidon_permute(h->state); // final permute
-
-    // LE squeeze: 32 bytes = s0 + s1 + 16 zeros
+    poseidon_permute(h->state);
     for(int i = 0; i < 8; i++) out[i] = (uint8_t)(h->state[0] >> (8*i));
     for(int i = 0; i < 8; i++) out[8+i] = (uint8_t)(h->state[1] >> (8*i));
     memset(out + 16, 0, 16);
-
     memset(h, 0, sizeof(*h));
     return 0;
 }
