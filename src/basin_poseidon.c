@@ -14,12 +14,15 @@
 static inline uint64_t le64(const uint8_t* p){uint64_t x;memcpy(&x,p,8);return x;}
 static inline void st64(uint8_t* p,uint64_t x){for(int i=0;i<8;i++)p[i]=(uint8_t)(x>>(8*i));}
 static inline uint64_t pow5(uint64_t x){uint64_t x2=x*x;return x2*x2*x;}
+
+// FIX: Basin MDS matrix
 static inline void mds(uint64_t s[3]){
-    uint64_t a=s[0]*2 + s[1]*3 + s[2]*1;
-    uint64_t b=s[0]*1 + s[1]*2 + s[2]*3;
-    uint64_t c=s[0]*3 + s[1]*1 + s[2]*2;
+    uint64_t a=s[0]*5 + s[1]*7 + s[2]*1;
+    uint64_t b=s[0]*1 + s[1]*5 + s[2]*7;
+    uint64_t c=s[0]*7 + s[1]*1 + s[2]*5;
     s[0]=a; s[1]=b; s[2]=c;
 }
+
 static void perm(uint64_t s[3]){
     for(int r=0;r<ROUNDS;r++){
         int o=r*3;
