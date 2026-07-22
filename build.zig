@@ -1,20 +1,23 @@
 const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
+    const p = 21888242871839275222246405745257275088548364400416034343698204186575808495617; // BN254 field
+
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
         var input: [13]u8 = undefined;
         @memcpy(input[0..5], "Basin");
-        std.mem.writeInt(u64, input[5..13], @as(u64,i),.little); // LE counter
+        std.mem.writeInt(u64, input[5..13], @as(u64,i),.little);
 
         var shake = std.crypto.hash.sha3.Shake256.init(.{});
         shake.update(&input);
         var out: [8]u8 = undefined;
         shake.final(&out);
-        rc[i] = std.mem.readInt(u64, &out,.little);
+        var raw = std.mem.readInt(u64, &out,.little);
+        rc[i] = raw % p; // <- THIS IS THE FIX FOR CIRCOM
     }
 
-    std.debug.print("RC0: 0x{x:0>16}\n",.{rc[0]}); // MUST be 634d5091dbd3a18f
+    std.debug.print("RC0: 0x{x:0>16}\n",.{rc[0]});
 
     var buf = std.ArrayList(u8).init(b.allocator);
     const w = buf.writer();
@@ -24,7 +27,7 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
         if (i != rc.len - 1) w.print(",",.{}) catch @panic("OOM");
         if (i % 3 == 2) w.print("\n",.{}) catch @panic("OOM");
     }
-    w.print("}};\n\n#endif\n",.{}) catch @panic("OOM");
+    w.print("}};\n\nstatic const uint64_t POSEIDON_MDS[3][3] = {{ {1,1,1}, {1,2,1}, {2,1,1} }};\n\n#endif\n",.{}) catch @panic("OOM");
     return b.addWriteFile("basin_poseidon_rc.h", buf.items);
 }
 
