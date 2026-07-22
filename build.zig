@@ -6,6 +6,8 @@ pub fn build(b: *std.Build) void {
 
     const constant_time = b.option(bool, "constant-time", "Enable constant-time mode. Slower but safe for secrets") orelse false;
     const use_native = b.option(bool, "native", "Enable -march=native. Faster but not portable") orelse false;
+    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
+    const install_tests = b.option(bool, "install-tests", "Install test binary to zig-out/bin") orelse false;
 
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
@@ -34,9 +36,7 @@ pub fn build(b: *std.Build) void {
     }
 
     // PURE V0.1: Only the hasher
-    const c_files = &.{
-        "src/basin_poseidon.c",
-    };
+    const c_files = &.{ "src/basin_poseidon.c" };
 
     const exe = b.addExecutable(.{
         .name = "basin-example",
@@ -50,7 +50,9 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
+    // Test executable
     const tests = b.addTest(.{
+        .name = "basin-test",
         .root_source_file = b.path("tests/run.zig"),
         .target = target,
         .optimize = .ReleaseSafe,
@@ -60,11 +62,15 @@ pub fn build(b: *std.Build) void {
     tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     tests.root_module.addImport("basin", basin_mod);
 
-    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
     const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};", .{skip_heavy}));
     tests.root_module.addAnonymousImport("build_config", .{
         .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
+
+    // Install test binary for valgrind if requested
+    if (install_tests) {
+        b.installArtifact(tests);
+    }
 
     const test_step = b.step("test", "Run correctness tests");
     test_step.dependOn(&b.addRunArtifact(tests).step);
