@@ -62,13 +62,13 @@ int basin_hasher_update(basin_hasher_t* h, const uint8_t* data, size_t len) {
 
 int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]) {
     if(!h ||!out) return -1;
-    // padding: 0x01 then zeros
+   
     if(h->buf_len < BASIN_POSEIDON_BLOCK_SIZE) {
         h->buffer[h->buf_len] = 0x01;
     }
     absorb_block(h);
 
-    // squeeze 32 bytes
+    
     ((uint64_t*)out)[0] = h->state[0];
     ((uint64_t*)out)[1] = h->state[1];
     ((uint64_t*)out)[2] = h->state[2];
@@ -76,7 +76,7 @@ int basin_hasher_final(basin_hasher_t* h, uint8_t out[32]) {
     return 0;
 }
 
-// One-shot helper
+
 int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output) {
     basin_hasher_t h;
     basin_hasher_init(&h);
