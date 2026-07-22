@@ -32,7 +32,7 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator)![]u8 {
 
     var out_stack: [32]u8 = undefined;
     const rc = c.basin_poseidon_hash(input.ptr, input.len, &out_stack);
-    if (rc!= 0) {
+    if (rc != 0) {
         return BasinError.HashFailed;
     }
     return try allocator.dupe(u8, &out_stack);
@@ -45,20 +45,20 @@ pub const Hasher = struct {
     /// Start a new hash
     pub fn init()!Hasher {
         var h: Hasher = undefined;
-        if (c.basin_hasher_init(&h.c_hasher)!= 0) return BasinError.InitFailed;
+        if (c.basin_hasher_init(&h.c_hasher) != 0) return BasinError.InitFailed;
         return h;
     }
 
     /// Absorb more data. Can be called multiple times
     pub fn update(self: *Hasher, data: []const u8)!void {
-        if (c.basin_hasher_update(&self.c_hasher, data.ptr, data.len)!= 0) {
+        if (c.basin_hasher_update(&self.c_hasher, data.ptr, data.len) != 0) {
             return BasinError.HashFailed;
         }
     }
 
     /// Finalize and write 32 bytes to out
     pub fn final(self: *Hasher, out: *[32]u8)!void {
-        if (c.basin_hasher_final(&self.c_hasher, out)!= 0) {
+        if (c.basin_hasher_final(&self.c_hasher, out) != 0) {
             return BasinError.HashFailed;
         }
     }
