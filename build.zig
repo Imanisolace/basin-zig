@@ -1,9 +1,13 @@
+const std = @import("std");
+
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
+    // Generate 195 * 8 = 1560 bytes from SHAKE256("Basin Poseidon")
     var rc_bytes: [195 * 8]u8 = undefined;
     var shake = std.crypto.hash.sha3.Shake256.init(.{});
     shake.update("Basin Poseidon");
     shake.final(&rc_bytes);
 
+    // Convert to 195 u64 in little endian
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
         rc[i] = std.mem.readInt(u64, rc_bytes[i*8..][0..8],.little);
@@ -23,6 +27,7 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
 
     return b.addWriteFile("basin_poseidon_rc.h", buf.items);
 }
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -32,9 +37,9 @@ pub fn build(b: *std.Build) void {
     const use_avx2 = b.option(bool, "avx2", "Force enable AVX2. Ignored if native=false") orelse true;
 
     const basin_mod = b.addModule("basin",.{
-      .root_source_file = b.path("src/basin.zig"),
-      .target = target,
-      .optimize = optimize,
+       .root_source_file = b.path("src/basin.zig"),
+       .target = target,
+       .optimize = optimize,
     });
     basin_mod.addIncludePath(b.path("include"));
 
@@ -77,10 +82,10 @@ pub fn build(b: *std.Build) void {
 
     // ========== Example exe ==========
     const exe = b.addExecutable(.{
-      .name = "basin-example",
-      .root_source_file = b.path("examples/main.zig"),
-      .target = target,
-      .optimize = optimize,
+       .name = "basin-example",
+       .root_source_file = b.path("examples/main.zig"),
+       .target = target,
+       .optimize = optimize,
     });
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(rc_header.getDirectory());
@@ -92,9 +97,9 @@ pub fn build(b: *std.Build) void {
 
     // ========== Tests ==========
     const tests = b.addTest(.{
-      .root_source_file = b.path("tests/run.zig"),
-      .target = target,
-      .optimize =.ReleaseSafe,
+       .root_source_file = b.path("tests/run.zig"),
+       .target = target,
+       .optimize =.ReleaseSafe,
     });
     tests.addIncludePath(b.path("include"));
     tests.addIncludePath(rc_header.getDirectory());
@@ -106,7 +111,7 @@ pub fn build(b: *std.Build) void {
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
     const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};",.{skip_heavy}));
     tests.root_module.addAnonymousImport("build_config",.{
-      .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
+       .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
 
     const test_step = b.step("test", "Run correctness tests");
