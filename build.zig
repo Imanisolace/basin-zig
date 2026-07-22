@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
         c_flags.append("-DCONSTANT_TIME=1") catch @panic("OOM");
     }
 
-    // PURE V0.1: Only the hasher
+    
     const c_files = &.{ "src/basin_poseidon.c" };
 
     const exe = b.addExecutable(.{
@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    // Test executable
+    
     const tests = b.addTest(.{
         .name = "basin-test",
         .root_source_file = b.path("tests/run.zig"),
