@@ -16,7 +16,7 @@ jobs:
 
   valgrind:
     runs-on: ubuntu-latest
-    needs: test  # <-- wait for test job to finish first
+    needs: test  
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
@@ -31,4 +31,4 @@ jobs:
 
       - name: Run Valgrind
         run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
-        #                                                    ^ space fixed here
+                                                          
