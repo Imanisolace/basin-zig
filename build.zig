@@ -1,10 +1,13 @@
-const std = @import("std");
-
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
-    var rc: [195]u64 = undefined;
+    var rc_bytes: [195 * 8]u8 = undefined;
     var shake = std.crypto.hash.sha3.Shake256.init(.{});
     shake.update("Basin Poseidon");
-    shake.final(std.mem.asBytes(&rc));
+    shake.final(&rc_bytes);
+
+    var rc: [195]u64 = undefined;
+    for (0..195) |i| {
+        rc[i] = std.mem.readInt(u64, rc_bytes[i*8..][0..8],.little);
+    }
 
     var buf = std.ArrayList(u8).init(b.allocator);
     defer buf.deinit();
@@ -20,7 +23,6 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
 
     return b.addWriteFile("basin_poseidon_rc.h", buf.items);
 }
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
