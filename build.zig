@@ -1,6 +1,7 @@
 const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
+    // Basin RC: SHAKE256("Poseidon" || 0x00 || BE(u64(i)) || 0x00)
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
         var input: [18]u8 = undefined;
@@ -15,7 +16,23 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
         shake.final(&out);
         rc[i] = std.mem.readInt(u64, &out,.little);
     }
-    //... rest same
+
+    // DEBUG: uncomment to verify RC0
+    // std.debug.print("RC0: 0x{x:0>16}\n",.{rc[0]});
+
+    var buf = std.ArrayList(u8).init(b.allocator);
+    // don't defer here, we need buf.items after
+    const w = buf.writer();
+    w.print("#ifndef BASIN_POSEIDON_RC_H\n#define BASIN_POSEIDON_RC_H\n#include <stdint.h>\n\nstatic const uint64_t POSEIDON_RC[195] = {{\n",.{}) catch @panic("OOM");
+    for (rc, 0..) |v, i| {
+        w.print("0x{x:0>16}ULL",.{v}) catch @panic("OOM");
+        if (i != rc.len - 1) w.print(",",.{}) catch @panic("OOM");
+        if (i % 3 == 2) w.print("\n",.{}) catch @panic("OOM");
+    }
+    w.print("}};\n\n#endif\n",.{}) catch @panic("OOM");
+
+    // FIX: actually return the file
+    return b.addWriteFile("basin_poseidon_rc.h", buf.items);
 }
 
 pub fn build(b: *std.Build) void {
@@ -27,13 +44,13 @@ pub fn build(b: *std.Build) void {
     const use_avx2 = b.option(bool, "avx2", "Force enable AVX2. Ignored if native=false") orelse true;
 
     const basin_mod = b.addModule("basin",.{
-      .root_source_file = b.path("src/basin.zig"),
-      .target = target,
-      .optimize = optimize,
+     .root_source_file = b.path("src/basin.zig"),
+     .target = target,
+     .optimize = optimize,
     });
     basin_mod.addIncludePath(b.path("include"));
 
-    const rc_header = generateRC(b);
+    const rc_header = generateRC(b); // now returns properly
     basin_mod.addIncludePath(rc_header.getDirectory());
 
     var c_flags = std.ArrayList([]const u8).init(b.allocator);
@@ -70,10 +87,10 @@ pub fn build(b: *std.Build) void {
     };
 
     const exe = b.addExecutable(.{
-      .name = "basin-example",
-      .root_source_file = b.path("examples/main.zig"),
-      .target = target,
-      .optimize = optimize,
+     .name = "basin-example",
+     .root_source_file = b.path("examples/main.zig"),
+     .target = target,
+     .optimize = optimize,
     });
     exe.addIncludePath(b.path("include"));
     exe.addIncludePath(rc_header.getDirectory());
@@ -84,9 +101,9 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     const tests = b.addTest(.{
-      .root_source_file = b.path("tests/run.zig"),
-      .target = target,
-      .optimize =.ReleaseSafe,
+     .root_source_file = b.path("tests/run.zig"),
+     .target = target,
+     .optimize =.ReleaseSafe,
     });
     tests.addIncludePath(b.path("include"));
     tests.addIncludePath(rc_header.getDirectory());
@@ -98,7 +115,7 @@ pub fn build(b: *std.Build) void {
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive/AVX tests") orelse false;
     const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};",.{skip_heavy}));
     tests.root_module.addAnonymousImport("build_config",.{
-      .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
+     .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
 
     const test_step = b.step("test", "Run correctness tests");
