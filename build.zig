@@ -2,7 +2,9 @@ const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
     var rc: [195]u64 = undefined;
-    std.crypto.core.sha3.shake256("Basin Poseidon", std.mem.asBytes(&rc));
+    var shake = std.crypto.hash.sha3.Shake256.init(.{});
+    shake.update("Basin Poseidon");
+    shake.final(std.mem.asBytes(&rc));
 
     var buf = std.ArrayList(u8).init(b.allocator);
     defer buf.deinit();
@@ -11,7 +13,7 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
     w.print("#ifndef BASIN_POSEIDON_RC_H\n#define BASIN_POSEIDON_RC_H\n#include <stdint.h>\n\nstatic const uint64_t POSEIDON_RC[195] = {{\n",.{}) catch @panic("OOM");
     for (rc, 0..) |v, i| {
         w.print("0x{x:0>16}ULL",.{v}) catch @panic("OOM");
-        if (i != rc.len - 1) w.print(",",.{}) catch @panic("OOM");
+        if (i!= rc.len - 1) w.print(",",.{}) catch @panic("OOM");
         if (i % 3 == 2) w.print("\n",.{}) catch @panic("OOM");
     }
     w.print("}};\n\n#endif // BASIN_POSEIDON_RC_H\n",.{}) catch @panic("OOM");
