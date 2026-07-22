@@ -31,7 +31,7 @@ int basin_poseidon_hash(const uint8_t* input, size_t input_len, uint8_t* output)
 
     size_t copy = input_len > 24? 24 : input_len;
     memcpy(block, input, copy);
-    if(copy < 24) block = 0x01; // domain sep padding
+    if(copy < 24) block[copy] = 0x01; // domain sep padding
 
     for(int i=0; i<3; i++) {
         state[i] ^= ((uint64_t*)block)[i];
