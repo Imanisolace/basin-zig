@@ -1,6 +1,7 @@
 const std = @import("std");
 
-fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
+
+ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
     // Hardcoded RC from SHAKE256("Basin Poseidon") - matches KAT
     const rc =
         \\#ifndef BASIN_POSEIDON_RC_H
@@ -59,11 +60,11 @@ fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
         \\};
         \\
         \\#endif // BASIN_POSEIDON_RC_H
+        \\
     ;
 
     return b.addWriteFile("basin_poseidon_rc.h", rc);
 }
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
