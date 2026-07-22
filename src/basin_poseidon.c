@@ -11,11 +11,17 @@
 
 #include "basin_poseidon_rc.h"
 
-static inline uint64_t le64(const uint8_t* p){uint64_t x;memcpy(&x,p,8);return x;}
-static inline void st64(uint8_t* p,uint64_t x){for(int i=0;i<8;i++)p[i]=(uint8_t)(x>>(8*i));}
+static inline uint64_t be64(const uint8_t* p){ // CHANGED: was le64
+    uint64_t x = 0;
+    for(int i=0;i<8;i++) x = (x<<8) | p[i];
+    return x;
+}
+static inline void st64(uint8_t* p,uint64_t x){ // CHANGED: write BE
+    for(int i=7;i>=0;i--){ p[i]=(uint8_t)x; x>>=8; }
+}
 static inline uint64_t pow5(uint64_t x){uint64_t x2=x*x;return x2*x2*x;}
 
-// FIX: Basin MDS matrix
+// Basin MDS matrix
 static inline void mds(uint64_t s[3]){
     uint64_t a=s[0]*5 + s[1]*7 + s[2]*1;
     uint64_t b=s[0]*1 + s[1]*5 + s[2]*7;
@@ -43,8 +49,8 @@ int basin_hasher_update(basin_hasher_t* h,const uint8_t* d,size_t n){
         memcpy(h->buffer+h->buf_len,d+i,c);
         h->buf_len+=c; i+=c;
         if(h->buf_len==BLOCK_SIZE){
-            h->state[0]^=le64(h->buffer);
-            h->state[1]^=le64(h->buffer+8);
+            h->state[0]^=be64(h->buffer); // BE
+            h->state[1]^=be64(h->buffer+8); // BE
             perm(h->state);
             h->buf_len=0;
         }
@@ -56,11 +62,11 @@ int basin_hasher_final(basin_hasher_t* h,uint8_t o[OUTPUT_BYTES]){
     h->buffer[h->buf_len]=0x01;
     memset(h->buffer+h->buf_len+1,0,BLOCK_SIZE-h->buf_len-1);
     h->buffer[BLOCK_SIZE-1]|=0x80;
-    h->state[0]^=le64(h->buffer);
-    h->state[1]^=le64(h->buffer+8);
+    h->state[0]^=be64(h->buffer); // BE
+    h->state[1]^=be64(h->buffer+8); // BE
     perm(h->state);
-    st64(o,h->state[0]);
-    st64(o+8,h->state[1]);
+    st64(o,h->state[0]); // write BE
+    st64(o+8,h->state[1]); // write BE
     memset(o+16,0,16);
     memset(h,0,sizeof(*h));
     return 0;
