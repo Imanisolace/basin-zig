@@ -67,7 +67,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
     });
 
-    // Install test binary for valgrind if requested
+    
     if (install_tests) {
         b.installArtifact(tests);
     }
