@@ -17,7 +17,6 @@ pub fn build(b: *std.Build) void {
     var c_flags = std.ArrayList([]const u8).init(b.allocator);
     defer c_flags.deinit();
 
-    // Base flags
     c_flags.appendSlice(&.{ "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
 
     if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
@@ -34,10 +33,10 @@ pub fn build(b: *std.Build) void {
         c_flags.append("-DCONSTANT_TIME=1") catch @panic("OOM");
     }
 
+    // FIXED: removed basin_init.c
     const c_files = &.{
         "src/basin_config.c",
-        "src/basin_init.c",
-        "src/basin_poseidon.c",
+        "src/basin_poseidon.c",  // hasher now
         "src/basin_parallel.c",
     };
 
@@ -62,7 +61,7 @@ pub fn build(b: *std.Build) void {
     tests.addIncludePath(b.path("include"));
     tests.linkLibC();
     tests.linkSystemLibrary("pthread");
-    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
+    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items }); // uses same fixed c_files
     tests.root_module.addImport("basin", basin_mod);
 
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
