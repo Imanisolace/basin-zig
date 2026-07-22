@@ -1,14 +1,14 @@
 const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
-    // RC[i] = SHAKE256("Basin Poseidon" || u64(i), 8 bytes)
+    // RC[i] = SHAKE256("Poseidon" || u64(i), 8 bytes)
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
-        var input: [22]u8 = undefined;
-        @memcpy(input[0..14], "Basin Poseidon");
-        std.mem.writeInt(u64, input[14..22], @as(u64,i),.little);
+        var input: [16]u8 = undefined;
+        @memcpy(input[0..8], "Poseidon");
+        std.mem.writeInt(u64, input[8..16], @as(u64,i),.little);
 
-        var shake = std.crypto.hash.sha3.Shake256.init(.{}); // <-- THIS IS THE FIX
+        var shake = std.crypto.hash.sha3.Shake256.init(.{});
         shake.update(&input);
         var out: [8]u8 = undefined;
         shake.final(&out);
