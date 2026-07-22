@@ -1,33 +1,31 @@
 const std = @import("std");
 
 fn generateRC(b: *std.Build) *std.Build.Step.WriteFile {
-    // RC[i] = SHAKE256("Basin Poseidon" || BE(u64(i)), 8 bytes)
+    // Basin RC: SHAKE256("Basin Poseidon" || BE(u64(i)) || 0x00)
     var rc: [195]u64 = undefined;
     for (0..195) |i| {
-        var input: [22]u8 = undefined;
+        var input: [23]u8 = undefined;
         @memcpy(input[0..14], "Basin Poseidon");
-        std.mem.writeInt(u64, input[14..22], @as(u64,i),.big); // BE not LE
+        std.mem.writeInt(u64, input[14..22], @as(u64,i),.big);
+        input[22] = 0x00; // domain separator byte
 
         var shake = std.crypto.hash.sha3.Shake256.init(.{});
         shake.update(&input);
         var out: [8]u8 = undefined;
         shake.final(&out);
-
-        rc[i] = std.mem.readInt(u64, &out,.little); // but read result as LE
+        rc[i] = std.mem.readInt(u64, &out,.little);
     }
 
     var buf = std.ArrayList(u8).init(b.allocator);
     defer buf.deinit();
     const w = buf.writer();
-
     w.print("#ifndef BASIN_POSEIDON_RC_H\n#define BASIN_POSEIDON_RC_H\n#include <stdint.h>\n\nstatic const uint64_t POSEIDON_RC[195] = {{\n",.{}) catch @panic("OOM");
     for (rc, 0..) |v, i| {
         w.print("0x{x:0>16}ULL",.{v}) catch @panic("OOM");
         if (i != rc.len - 1) w.print(",",.{}) catch @panic("OOM");
         if (i % 3 == 2) w.print("\n",.{}) catch @panic("OOM");
     }
-    w.print("}};\n\n#endif // BASIN_POSEIDON_RC_H\n",.{}) catch @panic("OOM");
-
+    w.print("}};\n\n#endif\n",.{}) catch @panic("OOM");
     return b.addWriteFile("basin_poseidon_rc.h", buf.items);
 }
 
