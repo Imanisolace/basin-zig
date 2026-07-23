@@ -16,7 +16,7 @@ jobs:
 
   valgrind:
     runs-on: ubuntu-latest
-    needs: zig-test  
+    needs: zig-test
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
@@ -30,9 +30,9 @@ jobs:
         run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true
 
       - name: Run Valgrind
-        run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
+        run: valgrind --leak-check=full --error-exitcode=1./zig-out/bin/basin-test
 
-  wasm-api-test: # <-- NEW: This verifies the actual Merkle endpoint
+  wasm-api-test:
     runs-on: ubuntu-latest
     needs: zig-test
     steps:
@@ -45,14 +45,14 @@ jobs:
           node-version: '20'
 
       - name: Build WASM
-        run: zig build wasm # This fails if wasm.zig is broken
+        run: zig build wasm
 
       - name: Install API deps
         run: cd api && npm i
 
       - name: Start API Server
         run: cd api && node server.js &
-        
+
       - name: Wait for server
         run: sleep 3
 
@@ -61,7 +61,7 @@ jobs:
           curl -f -X POST http://localhost:8080/v1/prove \
             -H "Content-Type: application/json" \
             -d '{"items":["test1","test2","test3"],"target_index":1}' \
-            | grep -q "root" # fails if no root in response
+            | grep -q "root"
 
       - name: Health Check
         run: curl -f http://localhost:8080/health
