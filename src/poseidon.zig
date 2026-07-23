@@ -45,12 +45,10 @@ pub const MDS: [WIDTH][WIDTH]u64 = .{
     .{ 0x0000000000000001, 0x0000000000001, 0x0000000000000005 },
 };
 
-// FIXED: Explicitly narrow u128 down to u64 with @intCast after reduction
 pub inline fn add(a: u64, b: u64) u64 {
     return @intCast((@as(u128, a) + b) % P);
 }
 
-// FIXED: Explicitly narrow u128 down to u64 with @intCast after reduction
 pub inline fn mul(a: u64, b: u64) u64 {
     return @intCast((@as(u128, a) * b) % P);
 }
@@ -83,7 +81,8 @@ pub fn permute(s: *[WIDTH]u64) void {
     }
     for (0..RP) |_| {
         for (0..WIDTH) |i| s[i] = add(s[i], RC[round * WIDTH + i]);
-        s = pow5(s);
+        // FIXED: Target single first element element explicitly
+        s[0] = pow5(s[0]);
         applyMDS(s);
         round += 1;
     }
@@ -98,5 +97,5 @@ pub fn permute(s: *[WIDTH]u64) void {
 pub fn hash3(a: u64, b: u64, c: u64) u64 {
     var s = [WIDTH]u64{ a, b, c };
     permute(&s);
-    return s;
+    return s[0];
 }
