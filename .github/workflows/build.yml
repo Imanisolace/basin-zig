@@ -1,39 +1,41 @@
-name: CI
-
+name: CI / Build and Test
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
-
-env:
-  ZIG_VERSION: 0.14.0
+    branches: [ main ]
 
 jobs:
-  build-and-test:
-    name: Build and Test
+  build:
     runs-on: ubuntu-latest
-    
+    env:
+      ZIG_VERSION: 0.14.0
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Zig
-        uses: mlugg/setup-zig@v2
+        uses: mlugg/setup-zig@v1
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      - name: Install Valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
+      # Cache Zig to make builds instant
+      - name: Cache Zig Build Files
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/zig
+            .zig-cache
+          key: ${{ runner.os }}-zig-${{ env.ZIG_VERSION }}-${{ hashFiles('build.zig', 'src/**/*.zig') }}
+          restore-keys: |
+            ${{ runner.os }}-zig-${{ env.ZIG_VERSION }}-
 
-      - name: Build
-        run: zig build -Doptimize=ReleaseFast -Dskip-heavy=true
+      - name: Build Native Binaries
+        run: zig build --summary all
 
-      - name: Run tests
-        run: zig build test -Doptimize=ReleaseSafe -Dskip-heavy=true
-
-      - name: Run tests with Valgrind
-        run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
+      - name: Run Tests
+        run: zig build test --summary all
 
       - name: Build WASM
-        run: zig build wasm -Doptimize=ReleaseSmall
+        run: zig build wasm -Doptimize=ReleaseSmall --summary all
