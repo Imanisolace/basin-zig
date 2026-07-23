@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // 1. Example Binary - No C, No linkLibC
+    // 1. Example Binary
     const exe = b.addExecutable(.{
         .name = "basin-example",
         .root_source_file = b.path("examples/main.zig"),
@@ -24,24 +24,38 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    // 2. Test Suite - No C
+    // 2. WASM Binary (Outputs directly to api/basin.wasm)
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    const wasm = b.addExecutable(.{
+        .name = "basin",
+        .root_source_file = b.path("src/wasm.zig"),
+        .target = wasm_target,
+        .optimize = .ReleaseSmall,
+    });
+    wasm.rdynamic = true; 
+    wasm.entry = .disabled;
+
+    const wasm_install = b.addInstallArtifact(wasm, .{
+        .dest_dir = .{ .override = .{ .custom = "api" } },
+    });
+    const wasm_step = b.step("wasm", "Build Wasm for API");
+    wasm_step.dependOn(&wasm_install.step);
+
+    // 3. Test Suite
     const tests = b.addTest(.{
         .name = "basin-test",
         .root_source_file = b.path("tests/run.zig"),
         .target = target,
-        .optimize = .ReleaseSafe,
+        .optimize = optimize, // Respects user choice
     });
     tests.root_module.addImport("basin", basin_mod);
 
-    // 0.14 file generation for skip_heavy flag
-    const wf = b.addWriteFiles();
-    const config_path = wf.add("build_config.zig", b.fmt("pub const skip_heavy = {};\n", .{skip_heavy}));
-    
-    tests.step.dependOn(&wf.step); // build order fix
-
-    tests.root_module.addAnonymousImport("build_config", .{
-        .root_source_file = config_path,
-    });
+    const test_options = b.addOptions();
+    test_options.addOption(bool, "skip_heavy", skip_heavy);
+    tests.root_module.addImport("build_config", test_options.createModule());
 
     if (install_tests) b.installArtifact(tests);
 
