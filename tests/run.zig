@@ -1,12 +1,12 @@
 const std = @import("std");
 const basin = @import("basin");
-const merkle = @import("merkle.zig"); // ADD THIS
+const merkle = @import("merkle"); // imports src/merkle.zig via build.zig
 const build_config = @import("build_config");
 const prng = std.Random.DefaultPrng;
 
-// THIS RUNS merkle.zig TESTS
+// THIS RUNS all tests inside tests/merkle_test.zig
 test {
-    _ = @import("merkle.zig");
+    _ = @import("merkle_test.zig");
 }
 
 fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
