@@ -1,72 +1,76 @@
 const std = @import("std");
+const poseidon = @import("poseidon.zig");
 
-const c = @cImport({
-    @cInclude("basin.h");
-});
-
-
-pub const BasinError = error{
-    InitFailed,
-    HashFailed,
-    EmptyInput,
-};
-
-
-pub fn toHex(bytes: []const u8, allocator: std.mem.Allocator)![]u8 {
-    const hex_chars = "0123456789abcdef";
-    const out = try allocator.alloc(u8, bytes.len * 2);
-    errdefer allocator.free(out);
-
-    for (bytes, 0..) |b, i| {
-        out[i * 2] = hex_chars[b >> 4];
-        out[i * 2 + 1] = hex_chars[b & 0x0F];
-    }
-    return out;
-}
-
-
-pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator)![]u8 {
-    if (input.len == 0) {
-        return BasinError.EmptyInput;
-    }
-
-    var out_stack: [32]u8 = undefined;
-    const rc = c.basin_poseidon_hash(input.ptr, input.len, &out_stack);
-    if (rc != 0) {
-        return BasinError.HashFailed;
-    }
-    return try allocator.dupe(u8, &out_stack);
-}
-
+// Rate = 2 elements = 16 bytes. Capacity = 1 element = 8 bytes
+pub const BLOCK_SIZE = 16;
+pub const OUTPUT_SIZE = 32;
 
 pub const Hasher = struct {
-    c_hasher: c.basin_hasher_t,
+    state: [3]u64 =.{0, 0, 0},
+    buffer: [BLOCK_SIZE]u8 align(8) =.{0} ** BLOCK_SIZE,
+    buf_len: usize = 0,
 
-    
-    pub fn init()!Hasher {
-        var h: Hasher = undefined;
-        if (c.basin_hasher_init(&h.c_hasher) != 0) return BasinError.InitFailed;
-        return h;
+    pub fn init() Hasher {
+        return.{};
     }
 
-    
-    pub fn update(self: *Hasher, data: []const u8)!void {
-        if (c.basin_hasher_update(&self.c_hasher, data.ptr, data.len) != 0) {
-            return BasinError.HashFailed;
+    fn absorbBlock(self: *Hasher) void {
+        const block = std.mem.bytesAsSlice(u64, &self.buffer);
+
+        // Absorb into rate positions only. Leave state[2] as capacity
+        self.state[0] = poseidon.add(self.state[0], block[0]);
+        self.state[1] = poseidon.add(self.state[1], block[1]);
+
+        poseidon.permute(&self.state);
+        self.buf_len = 0;
+        @memset(&self.buffer, 0);
+    }
+
+    pub fn update(self: *Hasher, data: []const u8) void {
+        var i: usize = 0;
+        while (i < data.len) {
+            const to_copy = @min(BLOCK_SIZE - self.buf_len, data.len - i);
+            @memcpy(self.buffer[self.buf_len..][0..to_copy], data[i..][0..to_copy]);
+            self.buf_len += to_copy;
+            i += to_copy;
+            if (self.buf_len == BLOCK_SIZE) self.absorbBlock();
         }
     }
 
-    
-    pub fn final(self: *Hasher, out: *[32]u8)!void {
-        if (c.basin_hasher_final(&self.c_hasher, out) != 0) {
-            return BasinError.HashFailed;
-        }
-    }
+    pub fn final(self: *Hasher, out: *[OUTPUT_SIZE]u8) void {
+        // Injective 10*1 padding. Safe for buf_len == 0..16
+        self.buffer[self.buf_len] = 0x01;
+        self.buf_len += 1;
 
-    
-    pub fn finalHex(self: *Hasher, allocator: std.mem.Allocator)![]u8 {
-        var out: [32]u8 = undefined;
-        try self.final(&out);
-        return try toHex(&out, allocator);
+        // Zero pad the rest of the block
+        @memset(self.buffer[self.buf_len..], 0);
+        self.absorbBlock();
+
+        // Squeeze 32 bytes: rate -> permute -> rate
+        std.mem.writeInt(u64, out[0..8], self.state[0],.little);
+        std.mem.writeInt(u64, out[8..16], self.state[1],.little);
+
+        poseidon.permute(&self.state);
+
+        std.mem.writeInt(u64, out[16..24], self.state[0],.little);
+        std.mem.writeInt(u64, out[24..32], self.state[1],.little);
     }
 };
+
+pub fn hash(input: []const u8, out: *[OUTPUT_SIZE]u8) void {
+    var h = Hasher.init();
+    h.update(input);
+    h.final(out);
+}
+
+pub fn hash3(a: u64, b: u64, c: u64) u64 {
+    return poseidon.hash3(a, b, c);
+}
+
+test "basin hash padding edge cases" {
+    var out1: [OUTPUT_SIZE]u8 = undefined;
+    var out2: [OUTPUT_SIZE]u8 = undefined;
+    hash("", &out1); // empty
+    hash(&[_]u8{0x01}, &out2); // 1 byte
+    try std.testing.expect(!std.mem.eql(u8, &out1, &out2)); // must not collide
+}
