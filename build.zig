@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
-    const install_tests = b.option(bool, "install-tests", "Install test binary to zig-out/bin") orelse false;
+    // const install_tests = ...  <- DELETE THIS LINE
 
     // Core Basin module
     const basin_mod = b.addModule("basin", .{
@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    merkle_mod.addImport("basin", basin_mod); // merkle uses basin
+    merkle_mod.addImport("basin", basin_mod);
 
     // 1. Example Binary
     const exe = b.addExecutable(.{
@@ -68,8 +68,7 @@ pub fn build(b: *std.Build) void {
     test_options.addOption(bool, "skip_heavy", skip_heavy);
     tests.root_module.addImport("build_config", test_options.createModule());
 
-    // Always install test binary so valgrind can find it
-    b.installArtifact(tests);
+    b.installArtifact(tests); // Always install for valgrind
 
     const run_tests = b.addRunArtifact(tests);
     b.step("test", "Run correctness tests").dependOn(&run_tests.step);
