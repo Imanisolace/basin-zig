@@ -14,6 +14,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // ADD THIS: Merkle module
+    const merkle_mod = b.addModule("merkle", .{
+        .root_source_file = b.path("src/merkle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // 1. Example Binary
     const exe = b.addExecutable(.{
         .name = "basin-example",
@@ -37,6 +44,7 @@ pub fn build(b: *std.Build) void {
     });
     wasm.rdynamic = true; 
     wasm.entry = .disabled;
+    wasm.root_module.addImport("merkle", merkle_mod); // ADD THIS so wasm can use merkle
 
     const wasm_install = b.addInstallArtifact(wasm, .{
         .dest_dir = .{ .override = .{ .custom = "api" } },
@@ -52,6 +60,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize, // Respects user choice
     });
     tests.root_module.addImport("basin", basin_mod);
+    tests.root_module.addImport("merkle", merkle_mod); // ADD THIS
 
     const test_options = b.addOptions();
     test_options.addOption(bool, "skip_heavy", skip_heavy);
