@@ -4,74 +4,50 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const constant_time = b.option(bool, "constant-time", "Enable constant-time mode. Slower but safe for secrets") orelse false;
-    const use_native = b.option(bool, "native", "Enable -march=native. Faster but not portable") orelse false;
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
     const install_tests = b.option(bool, "install-tests", "Install test binary to zig-out/bin") orelse false;
 
+    // Core Basin module
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
         .target = target,
         .optimize = optimize,
     });
-    basin_mod.addIncludePath(b.path("include"));
 
-    var c_flags = std.ArrayList([]const u8).init(b.allocator);
-    defer c_flags.deinit();
-
-    c_flags.appendSlice(&.{ "-std=c11", "-Wall", "-Wextra", "-Werror", "-pedantic" }) catch @panic("OOM");
-
-    if (optimize == .ReleaseFast or optimize == .ReleaseSafe) {
-        c_flags.append("-O3") catch @panic("OOM");
-        c_flags.append("-DNDEBUG") catch @panic("OOM");
-        if (use_native) {
-            c_flags.append("-march=native") catch @panic("OOM");
-        }
-    } else {
-        c_flags.append("-O2") catch @panic("OOM");
-    }
-
-    if (constant_time) {
-        c_flags.append("-DCONSTANT_TIME=1") catch @panic("OOM");
-    }
-
-    
-    const c_files = &.{ "src/basin_poseidon.c" };
-
+    // 1. Example Binary - No C, No linkLibC
     const exe = b.addExecutable(.{
         .name = "basin-example",
         .root_source_file = b.path("examples/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    exe.addIncludePath(b.path("include"));
-    exe.linkLibC();
-    exe.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    
+    // 2. Test Suite - No C
     const tests = b.addTest(.{
         .name = "basin-test",
         .root_source_file = b.path("tests/run.zig"),
         .target = target,
         .optimize = .ReleaseSafe,
     });
-    tests.addIncludePath(b.path("include"));
-    tests.linkLibC();
-    tests.addCSourceFiles(.{ .files = c_files, .flags = c_flags.items });
     tests.root_module.addImport("basin", basin_mod);
 
-    const build_config_file = b.addWriteFile("build_config.zig", b.fmt("pub const skip_heavy = {};", .{skip_heavy}));
+    // 0.14 file generation for skip_heavy flag
+    const wf = b.addWriteFiles();
+    const config_path = wf.add("build_config.zig", b.fmt("pub const skip_heavy = {};\n", .{skip_heavy}));
+    
+    tests.step.dependOn(&wf.step); // build order fix
+
     tests.root_module.addAnonymousImport("build_config", .{
-        .root_source_file = build_config_file.getDirectory().path(b, "build_config.zig"),
+        .root_source_file = config_path,
     });
 
-    
-    if (install_tests) {
-        b.installArtifact(tests);
-    }
+    if (install_tests) b.installArtifact(tests);
 
-    const test_step = b.step("test", "Run correctness tests");
-    test_step.dependOn(&b.addRunArtifact(tests).step);
+    const run_tests = b.addRunArtifact(tests);
+    b.step("test", "Run correctness tests").dependOn(&run_tests.step);
+
+    const run_exe = b.addRunArtifact(exe);
+    b.step("run", "Run the example").dependOn(&run_exe.step);
 }
