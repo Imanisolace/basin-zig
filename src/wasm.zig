@@ -34,10 +34,8 @@ export fn api_compute_root(count: usize) bool {
     var fba = std.heap.FixedBufferAllocator.init(&arena_buf);
     const allocator = fba.allocator();
 
-    // Perform internal compute loops through the underlying standard library core
     var current_tier = allocator.alloc([OUTPUT_SIZE]u8, count) catch return false;
-    
-    // Using explicit loop copy for standard compatibility across slices/arrays
+
     for (0..count) |i| {
         current_tier[i] = global_leaf_buffer[i];
     }
@@ -70,7 +68,6 @@ export fn api_compute_root(count: usize) bool {
 
 /// Generates a proof layout path mapping inside the statically reserved proof structures
 export fn api_generate_proof(count: usize, leaf_index: usize) bool {
-    // Strictly enforces bounds to prevent arbitrary out-of-bounds crashes
     if (count == 0 or count > 10000 or leaf_index >= count) return false;
 
     var arena_buf: [1024 * 700]u8 = undefined;
@@ -87,18 +84,18 @@ export fn api_generate_proof(count: usize, leaf_index: usize) bool {
     var depth: usize = 0;
 
     while (current_len > 1) {
-        const is_odd = (target_idx % 2 != 0);
+        const is_odd = (target_idx % 2!= 0);
         const sibling_idx = if (is_odd) target_idx - 1 else target_idx + 1;
 
         if (sibling_idx < current_len) {
             global_proof_steps[depth] = ProofStepWasm{
-                .is_right = !is_odd,
-                .sibling = current_tier[sibling_idx],
+               .is_right =!is_odd,
+               .sibling = current_tier[sibling_idx],
             };
         } else {
             global_proof_steps[depth] = ProofStepWasm{
-                .is_right = true,
-                .sibling = current_tier[target_idx],
+               .is_right = true,
+               .sibling = current_tier[target_idx],
             };
         }
         depth += 1;
@@ -126,6 +123,55 @@ export fn api_generate_proof(count: usize, leaf_index: usize) bool {
     global_proof_len = depth;
     return true;
 }
+
+
+/// NEW: Statelessly verifies a Merkle proof against a known root hash
+/// Host must write proof siblings and flags into WASM memory via write_proof_data first
+export fn api_verify_proof(
+    leaf_ptr: [*]const u8,
+    root_ptr: [*]const u8, 
+    proof_len: usize,
+    siblings_ptr: [*]const u8, // contiguous array of proof_len * OUTPUT_SIZE bytes
+    is_right_ptr: [*]const u8, // contiguous array of proof_len * 1 byte: 0 or 1
+) bool {
+    if (proof_len == 0 or proof_len > MAX_DEPTH) return false;
+
+    var current_hash: [OUTPUT_SIZE]u8 = undefined;
+    // copy leaf into current_hash
+    @memcpy(&current_hash, leaf_ptr[0..OUTPUT_SIZE]);
+
+    var expected_root: [OUTPUT_SIZE]u8 = undefined;
+    @memcpy(&expected_root, root_ptr[0..OUTPUT_SIZE]);
+
+    for (0..proof_len) |i| {
+        const sibling_offset = i * OUTPUT_SIZE;
+        const sibling: [OUTPUT_SIZE]u8 = siblings_ptr[sibling_offset..sibling_offset + OUTPUT_SIZE].*;
+        const is_right = is_right_ptr[i]!= 0;
+
+        var h = basin.Hasher.init();
+        if (is_right) {
+            h.update(&current_hash);
+            h.update(&sibling);
+        } else {
+            h.update(&sibling);
+            h.update(&current_hash);
+        }
+        h.final(&current_hash);
+    }
+
+    return std.mem.eql(u8, &current_hash, &expected_root);
+}
+
+
+/// Helper: write proof data from JS into reserved WASM memory before calling api_verify_proof
+export fn write_proof_data(proof_len: usize, siblings_ptr: [*]u8, is_right_ptr: [*]u8) void {
+    // no-op: just exists so JS knows the required buffer size = proof_len * OUTPUT_SIZE + proof_len
+    // actual writing is done by JS via memory.set()
+    _ = proof_len;
+    _ = siblings_ptr;
+    _ = is_right_ptr;
+}
+
 
 // 2. Linear memory pointer exports for JS host bindings
 export fn get_root_ptr() [*]u8 { return &global_root_output; }
