@@ -10,7 +10,6 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.14.0
-
       - name: Build and Test Native
         run: zig build test -Doptimize=ReleaseSafe
 
@@ -22,13 +21,10 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.14.0
-
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
-
       - name: Build Artifacts for Valgrind
         run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true
-
       - name: Run Valgrind
         run: valgrind --leak-check=full --error-exitcode=1./zig-out/bin/basin-test
 
@@ -43,25 +39,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Build WASM
         run: zig build wasm
-
       - name: Install API deps
         run: cd api && npm i
-
       - name: Start API Server
         run: cd api && node server.js &
-
       - name: Wait for server
         run: sleep 3
-
       - name: Integration Test Merkle Prove
         run: |
           curl -f -X POST http://localhost:8080/v1/prove \
             -H "Content-Type: application/json" \
-            -d '{"items":["test1","test2","test3"],"target_index":1}' \
+            -d '{"items":["aa","bb","cc","dd"],"target_index":2}' \
             | grep -q "root"
-
       - name: Health Check
         run: curl -f http://localhost:8080/health
