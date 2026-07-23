@@ -125,11 +125,10 @@ export fn api_generate_proof(count: usize, leaf_index: usize) bool {
 }
 
 
-/// NEW: Statelessly verifies a Merkle proof against a known root hash
-/// Host must write proof siblings and flags into WASM memory via write_proof_data first
+/// Statelessly verifies a Merkle proof against a known root hash
 export fn api_verify_proof(
     leaf_ptr: [*]const u8,
-    root_ptr: [*]const u8, 
+    root_ptr: [*]const u8,
     proof_len: usize,
     siblings_ptr: [*]const u8, // contiguous array of proof_len * OUTPUT_SIZE bytes
     is_right_ptr: [*]const u8, // contiguous array of proof_len * 1 byte: 0 or 1
@@ -143,17 +142,20 @@ export fn api_verify_proof(
     var expected_root: [OUTPUT_SIZE]u8 = undefined;
     @memcpy(&expected_root, root_ptr[0..OUTPUT_SIZE]);
 
+    var sibling_buf: [OUTPUT_SIZE]u8 = undefined;
+
     for (0..proof_len) |i| {
         const sibling_offset = i * OUTPUT_SIZE;
-        const sibling: [OUTPUT_SIZE]u8 = siblings_ptr[sibling_offset..sibling_offset + OUTPUT_SIZE].*;
-        const is_right = is_right_ptr[i] != 0;
+        const sibling_slice = siblings_ptr[sibling_offset..sibling_offset + OUTPUT_SIZE];
+        @memcpy(&sibling_buf, sibling_slice); // <-- FIX HERE
+        const is_right = is_right_ptr[i]!= 0;
 
         var h = basin.Hasher.init();
         if (is_right) {
             h.update(&current_hash);
-            h.update(&sibling);
+            h.update(&sibling_buf);
         } else {
-            h.update(&sibling);
+            h.update(&sibling_buf);
             h.update(&current_hash);
         }
         h.final(&current_hash);
