@@ -1,6 +1,6 @@
 const std = @import("std");
-const merkle = @import("merkle.zig");
-const basin = @import("basin.zig");
+const merkle = @import("merkle");
+const basin = @import("basin");
 
 test "Merkle Accumulator: Complete Lifecycle Verification" {
     const allocator = std.testing.allocator;
