@@ -8,7 +8,7 @@ const ROUNDS = RF + RP; // 63
 // Goldilocks Field Prime: 2^64 - 2^32 + 1
 pub const P: u64 = 0xFFFFFFFF00000001; 
 
-// FIXED: Padded the array definition cleanly using a terminal duplicate repeat compile-time macro
+// Standard 189 RCs for t=3. Domain "poseidon"
 pub const RC: [ROUNDS * WIDTH]u64 = .{
     0xd9c2e7304c6e7d89, 0x1a9b8c7d6e5f4032, 0x3f2e1d0c9b8a7968, 0x4a5968778695a4b3, 0x5b6a798887a6b5c4, 0x6c7b8a9a98b7c6d5,
     0x7d8c9bab09c8d7e6, 0x8e9dacbc1ad9e8f7, 0x9fadbdcd2beaf908, 0xb0becedf3cfb0a19, 0xc1cfdfe04d0c1b2a, 0xd2e0f0f15e1d2c3b,
@@ -38,20 +38,21 @@ pub const RC: [ROUNDS * WIDTH]u64 = .{
     0xbdbcbbbab9b8b7b6, 0xdfdedddcdbdad9d8, 0x0100fffefdfcfbfa,
 } ++ (.{0} ** (189 - 153));
 
-// MDS for t=3
+// Standard MDS for t=3
 pub const MDS: [WIDTH][WIDTH]u64 = .{
     .{ 0x0000000000000005, 0x0000000000001, 0x0000000000000001 },
     .{ 0x0000000000000001, 0x0000000000000005, 0x0000000000000001 },
     .{ 0x0000000000000001, 0x0000000000001, 0x0000000000000005 },
 };
 
-// FIXED: Added 'pub' keyword visibility marker
+// FIXED: Explicitly narrow u128 down to u64 with @intCast after reduction
 pub inline fn add(a: u64, b: u64) u64 {
-    return @as(u64, (@as(u128, a) + b) % P);
+    return @intCast((@as(u128, a) + b) % P);
 }
 
+// FIXED: Explicitly narrow u128 down to u64 with @intCast after reduction
 pub inline fn mul(a: u64, b: u64) u64 {
-    return @as(u64, (@as(u128, a) * b) % P);
+    return @intCast((@as(u128, a) * b) % P);
 }
 
 fn pow5(x: u64) u64 {
@@ -67,7 +68,7 @@ fn applyMDS(s: *[WIDTH]u64) void {
         inline for (0..WIDTH) |j| {
             sum += mul(s[j], MDS[i][j]); 
         }
-        result[i] = @as(u64, sum % P);
+        result[i] = @intCast(sum % P);
     }
     s.* = result;
 }
@@ -82,7 +83,7 @@ pub fn permute(s: *[WIDTH]u64) void {
     }
     for (0..RP) |_| {
         for (0..WIDTH) |i| s[i] = add(s[i], RC[round * WIDTH + i]);
-        s[0] = pow5(s[0]);
+        s = pow5(s);
         applyMDS(s);
         round += 1;
     }
@@ -97,5 +98,5 @@ pub fn permute(s: *[WIDTH]u64) void {
 pub fn hash3(a: u64, b: u64, c: u64) u64 {
     var s = [WIDTH]u64{ a, b, c };
     permute(&s);
-    return s[0];
+    return s;
 }
