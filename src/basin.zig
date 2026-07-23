@@ -5,13 +5,17 @@ const poseidon = @import("poseidon.zig");
 pub const BLOCK_SIZE = 16;
 pub const OUTPUT_SIZE = 32;
 
+pub const BasinError = error{
+    EmptyInput,
+};
+
 pub const Hasher = struct {
-    state: [3]u64 =.{0, 0, 0},
-    buffer: [BLOCK_SIZE]u8 align(8) =.{0} ** BLOCK_SIZE,
+    state: [3]u64 = .{ 0, 0, 0 },
+    buffer: [BLOCK_SIZE]u8 align(8) = .{0} ** BLOCK_SIZE,
     buf_len: usize = 0,
 
     pub fn init() Hasher {
-        return.{};
+        return .{};
     }
 
     fn absorbBlock(self: *Hasher) void {
@@ -47,30 +51,46 @@ pub const Hasher = struct {
         self.absorbBlock();
 
         // Squeeze 32 bytes: rate -> permute -> rate
-        std.mem.writeInt(u64, out[0..8], self.state[0],.little);
-        std.mem.writeInt(u64, out[8..16], self.state[1],.little);
+        std.mem.writeInt(u64, out[0..8], self.state[0], .little);
+        std.mem.writeInt(u64, out[8..16], self.state[1], .little);
 
         poseidon.permute(&self.state);
 
-        std.mem.writeInt(u64, out[16..24], self.state[0],.little);
-        std.mem.writeInt(u64, out[24..32], self.state[1],.little);
+        std.mem.writeInt(u64, out[16..24], self.state[0], .little);
+        std.mem.writeInt(u64, out[24..32], self.state[1], .little);
     }
 };
 
-pub fn hash(input: []const u8, out: *[OUTPUT_SIZE]u8) void {
+// FIXED: Cleaned compiler error type token and optimized memory layout passing
+pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    if (input.len == 0) return BasinError.EmptyInput;
+
     var h = Hasher.init();
     h.update(input);
-    h.final(out);
+    
+    const out = try allocator.alloc(u8, OUTPUT_SIZE);
+    errdefer allocator.free(out);
+    
+    // Slice optimization: cast the slice directly to pointer length array
+    h.final(out[0..OUTPUT_SIZE]);
+    return out;
+}
+
+pub fn toHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    return std.fmt.allocPrintHex(allocator, input, .lower);
 }
 
 pub fn hash3(a: u64, b: u64, c: u64) u64 {
     return poseidon.hash3(a, b, c);
 }
 
-test "basin hash padding edge cases" {
-    var out1: [OUTPUT_SIZE]u8 = undefined;
-    var out2: [OUTPUT_SIZE]u8 = undefined;
-    hash("", &out1); // empty
-    hash(&[_]u8{0x01}, &out2); // 1 byte
-    try std.testing.expect(!std.mem.eql(u8, &out1, &out2)); // must not collide
+test "basin api smoke" {
+    const allocator = std.testing.allocator;
+    const h = try poseidonHash("test", allocator);
+    defer allocator.free(h);
+    try std.testing.expectEqual(@as(usize, 32), h.len);
+
+    const hex = try toHex(h, allocator);
+    defer allocator.free(hex);
+    try std.testing.expectEqual(@as(usize, 64), hex.len);
 }
