@@ -14,12 +14,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // ADD THIS: Merkle module
+    // Merkle module
     const merkle_mod = b.addModule("merkle", .{
         .root_source_file = b.path("src/merkle.zig"),
         .target = target,
         .optimize = optimize,
     });
+    merkle_mod.addImport("basin", basin_mod); // <-- ADD THIS LINE
 
     // 1. Example Binary
     const exe = b.addExecutable(.{
@@ -31,7 +32,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("basin", basin_mod);
     b.installArtifact(exe);
 
-    // 2. WASM Binary (Outputs directly to api/basin.wasm)
+    // 2. WASM Binary
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
@@ -44,7 +45,8 @@ pub fn build(b: *std.Build) void {
     });
     wasm.rdynamic = true; 
     wasm.entry = .disabled;
-    wasm.root_module.addImport("merkle", merkle_mod); // ADD THIS so wasm can use merkle
+    wasm.root_module.addImport("merkle", merkle_mod);
+    wasm.root_module.addImport("basin", basin_mod); // add this too in case wasm uses basin
 
     const wasm_install = b.addInstallArtifact(wasm, .{
         .dest_dir = .{ .override = .{ .custom = "api" } },
@@ -57,10 +59,10 @@ pub fn build(b: *std.Build) void {
         .name = "basin-test",
         .root_source_file = b.path("tests/run.zig"),
         .target = target,
-        .optimize = optimize, // Respects user choice
+        .optimize = optimize,
     });
     tests.root_module.addImport("basin", basin_mod);
-    tests.root_module.addImport("merkle", merkle_mod); // ADD THIS
+    tests.root_module.addImport("merkle", merkle_mod);
 
     const test_options = b.addOptions();
     test_options.addOption(bool, "skip_heavy", skip_heavy);
