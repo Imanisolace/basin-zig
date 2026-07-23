@@ -69,9 +69,9 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     return out;
 }
 
-// FIXED: Replaced non-existent allocPrintHex with standard allocPrintHexLower
+// FIXED: Replaced non-existent variant with proper allocPrint string format logic
 pub fn toHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
-    return std.fmt.allocPrintHexLower(allocator, input);
+    return std.fmt.allocPrint(allocator, "{}", .{std.fmt.fmtSliceHexLower(input)});
 }
 
 pub fn hash3(a: u64, b: u64, c: u64) u64 {
