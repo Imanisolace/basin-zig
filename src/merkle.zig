@@ -1,5 +1,5 @@
 const std = @import("std");
-const basin = @import("basin.zig");
+const basin = @import("basin");
 
 pub const OUTPUT_SIZE = basin.OUTPUT_SIZE;
 
