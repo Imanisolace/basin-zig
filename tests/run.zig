@@ -3,7 +3,7 @@ const basin = @import("basin");
 const build_config = @import("build_config");
 const prng = std.Random.DefaultPrng;
 
-fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
+fn hashToHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     const hash_bytes = try basin.poseidonHash(input, allocator);
     defer allocator.free(hash_bytes);
     return try basin.toHex(hash_bytes, allocator);
@@ -31,11 +31,16 @@ test "HASH: streaming matches one-shot" {
     const h1 = try basin.poseidonHash(data, allocator);
     defer allocator.free(h1);
 
-    var hasher = try basin.Hasher.init();
-    try hasher.update(data[0..5000]);
-    try hasher.update(data[5000..]);
+    // FIXED: Hasher.init() is infallible. Removed 'try' keyword.
+    var hasher = basin.Hasher.init();
+    
+    // FIXED: .update() is infallible. Removed 'try' keyword.
+    hasher.update(data[0..5000]);
+    hasher.update(data[5000..]);
+    
     var h2: [32]u8 = undefined;
-    try hasher.final(&h2);
+    // FIXED: .final() is infallible. Removed 'try' keyword.
+    hasher.final(&h2);
 
     try std.testing.expectEqualSlices(u8, h1, &h2);
 }
@@ -56,7 +61,8 @@ test "PROP: binary data with nulls is handled" {
 
 test "EDGE: block boundaries" {
     const allocator = std.testing.allocator;
-    const lengths = [_]usize{ 23, 24, 25, 48, 1024 };
+    // FIXED: Shifted boundary lengths to match your real pure-Zig rate size limits (16 and 32 bytes)
+    const lengths = [_]usize{ 15, 16, 17, 32, 1024 };
     for (lengths) |len| {
         const data = try allocator.alloc(u8, len);
         defer allocator.free(data);
@@ -94,5 +100,5 @@ test "BENCH: speed" {
     const ns = timer.read();
 
     const mb_s = 1.0 / (@as(f64, @floatFromInt(ns)) / 1e9);
-    std.debug.print("\nbasin: {d:.2} MB/s\n",.{mb_s});
+    std.debug.print("\nbasin: {d:.2} MB/s\n", .{mb_s});
 }
