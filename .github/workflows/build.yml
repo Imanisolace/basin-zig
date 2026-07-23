@@ -26,7 +26,7 @@ jobs:
       - name: Build Artifacts for Valgrind
         run: zig build -Doptimize=ReleaseFast -Dinstall-tests=true -Dskip-heavy=true
       - name: Run Valgrind
-        run: valgrind --leak-check=full --error-exitcode=1./zig-out/bin/basin-test
+        run: valgrind --leak-check=full --error-exitcode=1 ./zig-out/bin/basin-test
 
   wasm-api-test:
     runs-on: ubuntu-latest
