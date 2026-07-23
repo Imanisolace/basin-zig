@@ -14,13 +14,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // Merkle module
+    // Merkle module - depends on basin
     const merkle_mod = b.addModule("merkle", .{
         .root_source_file = b.path("src/merkle.zig"),
         .target = target,
         .optimize = optimize,
     });
-    merkle_mod.addImport("basin", basin_mod); // <-- ADD THIS LINE
+    merkle_mod.addImport("basin", basin_mod); // merkle uses basin
 
     // 1. Example Binary
     const exe = b.addExecutable(.{
@@ -45,8 +45,8 @@ pub fn build(b: *std.Build) void {
     });
     wasm.rdynamic = true; 
     wasm.entry = .disabled;
+    wasm.root_module.addImport("basin", basin_mod);
     wasm.root_module.addImport("merkle", merkle_mod);
-    wasm.root_module.addImport("basin", basin_mod); // add this too in case wasm uses basin
 
     const wasm_install = b.addInstallArtifact(wasm, .{
         .dest_dir = .{ .override = .{ .custom = "api" } },
@@ -68,7 +68,8 @@ pub fn build(b: *std.Build) void {
     test_options.addOption(bool, "skip_heavy", skip_heavy);
     tests.root_module.addImport("build_config", test_options.createModule());
 
-    if (install_tests) b.installArtifact(tests);
+    // Always install test binary so valgrind can find it
+    b.installArtifact(tests);
 
     const run_tests = b.addRunArtifact(tests);
     b.step("test", "Run correctness tests").dependOn(&run_tests.step);
