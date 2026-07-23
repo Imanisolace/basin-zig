@@ -3,7 +3,12 @@ const basin = @import("basin");
 const build_config = @import("build_config");
 const prng = std.Random.DefaultPrng;
 
-fn hashToHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
+// THIS IS THE ONLY NEW LINE. This runs all tests in merkle_test.zig
+test {
+    _ = @import("merkle_test.zig");
+}
+
+fn hashToHex(input: []const u8, allocator: std.mem.Allocator)![]u8 {
     const hash_bytes = try basin.poseidonHash(input, allocator);
     defer allocator.free(hash_bytes);
     return try basin.toHex(hash_bytes, allocator);
@@ -31,15 +36,11 @@ test "HASH: streaming matches one-shot" {
     const h1 = try basin.poseidonHash(data, allocator);
     defer allocator.free(h1);
 
-    // FIXED: Hasher.init() is infallible. Removed 'try' keyword.
     var hasher = basin.Hasher.init();
-    
-    // FIXED: .update() is infallible. Removed 'try' keyword.
     hasher.update(data[0..5000]);
     hasher.update(data[5000..]);
-    
+
     var h2: [32]u8 = undefined;
-    // FIXED: .final() is infallible. Removed 'try' keyword.
     hasher.final(&h2);
 
     try std.testing.expectEqualSlices(u8, h1, &h2);
@@ -61,7 +62,6 @@ test "PROP: binary data with nulls is handled" {
 
 test "EDGE: block boundaries" {
     const allocator = std.testing.allocator;
-    // FIXED: Shifted boundary lengths to match your real pure-Zig rate size limits (16 and 32 bytes)
     const lengths = [_]usize{ 15, 16, 17, 32, 1024 };
     for (lengths) |len| {
         const data = try allocator.alloc(u8, len);
@@ -78,7 +78,7 @@ test "FUZZ: random bytes dont crash" {
     const allocator = std.testing.allocator;
     var buf: [256]u8 = undefined;
     var i: usize = 0;
-    while (i < 100) : (i += 1) { 
+    while (i < 100) : (i += 1) {
         const len = rng.random().intRangeAtMost(usize, 0, buf.len);
         rng.random().bytes(buf[0..len]);
         const hash = basin.poseidonHash(buf[0..len], allocator) catch continue;
@@ -90,7 +90,7 @@ test "FUZZ: random bytes dont crash" {
 test "BENCH: speed" {
     if (build_config.skip_heavy) return error.SkipZigTest;
     const allocator = std.testing.allocator;
-    const data = try allocator.alloc(u8, 1 * 1024 * 1024); 
+    const data = try allocator.alloc(u8, 1 * 1024 * 1024);
     defer allocator.free(data);
     std.crypto.random.bytes(data);
 
@@ -100,5 +100,5 @@ test "BENCH: speed" {
     const ns = timer.read();
 
     const mb_s = 1.0 / (@as(f64, @floatFromInt(ns)) / 1e9);
-    std.debug.print("\nbasin: {d:.2} MB/s\n", .{mb_s});
+    std.debug.print("\nbasin: {d:.2} MB/s\n",.{mb_s});
 }
