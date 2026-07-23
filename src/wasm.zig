@@ -84,7 +84,7 @@ export fn api_generate_proof(count: usize, leaf_index: usize) bool {
     var depth: usize = 0;
 
     while (current_len > 1) {
-        const is_odd = (target_idx % 2!= 0);
+        const is_odd = (target_idx % 2 != 0);
         const sibling_idx = if (is_odd) target_idx - 1 else target_idx + 1;
 
         if (sibling_idx < current_len) {
@@ -146,7 +146,7 @@ export fn api_verify_proof(
     for (0..proof_len) |i| {
         const sibling_offset = i * OUTPUT_SIZE;
         const sibling: [OUTPUT_SIZE]u8 = siblings_ptr[sibling_offset..sibling_offset + OUTPUT_SIZE].*;
-        const is_right = is_right_ptr[i]!= 0;
+        const is_right = is_right_ptr[i] != 0;
 
         var h = basin.Hasher.init();
         if (is_right) {
