@@ -5,12 +5,12 @@ FROM node:20-slim
 WORKDIR /app
 
 # 3. Install deps first for better docker layer caching
-COPY package*.json ./
+COPY API/package*.json ./
 RUN npm ci --only=production
 
 # 4. Copy app code + pre-built wasm
-COPY server.js ./
-COPY worker.js ./
+COPY API/server.js ./
+COPY API/worker.js ./
 COPY basin.wasm ./
 
 # 5. Expose port
