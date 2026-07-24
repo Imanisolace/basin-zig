@@ -39,8 +39,11 @@ jobs:
       - name: Build WASM
         run: zig build wasm -Doptimize=ReleaseSmall --summary all
 
+      - name: List zig-out folder  # <-- ADD THIS TO DEBUG
+        run: ls -R zig-out
+
       - name: Upload WASM Artifact
         uses: actions/upload-artifact@v4
         with:
           name: basin-wasm
-          path: zig-out/bin/wasm/basin.wasm  # <-- FIXED PATH
+          path: zig-out/**/basin.wasm  # <-- use glob to catch it anywhere
