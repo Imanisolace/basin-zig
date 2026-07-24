@@ -9,8 +9,8 @@ COPY API/package*.json ./
 RUN npm ci --only=production
 
 # 4. Copy app code + pre-built wasm
-COPY API/server.js ./
-COPY API/worker.js ./
+COPY api/server.js ./
+COPY api/worker.js ./
 COPY basin.wasm ./
 
 # 5. Expose port
