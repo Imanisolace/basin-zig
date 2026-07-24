@@ -39,3 +39,9 @@ jobs:
 
       - name: Build WASM
         run: zig build wasm -Doptimize=ReleaseSmall --summary all
+
+      - name: Upload WASM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: basin-wasm
+          path: zig-out/bin/basin.wasm
