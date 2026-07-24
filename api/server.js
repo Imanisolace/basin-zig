@@ -14,7 +14,7 @@ app.use((_, res, next) => {
 });
 
 // ========== COMMERCIAL LAYER ==========
-const VALID_KEYS = new Set(['basin_free_dev_key', 'alpha_tester_key_99']);
+const VALID_KEYS = new Set([process.env.API_KEY]); // <-- ONLY CHANGE: now reads from Railway
 const requestCounters = new Map(); // key: "apikey:minute"
 
 function enforceApiLimits(req, res, next) {
