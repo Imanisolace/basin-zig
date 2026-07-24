@@ -6,7 +6,7 @@ WORKDIR /app
 
 # 3. Install deps first for better docker layer caching
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # 4. Copy app code + pre-built wasm
 COPY api/server.js ./
