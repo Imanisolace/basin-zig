@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>Basin Test</title></head>
+<body>
+<h2>Test Basin API</h2>
+<button onclick="testProve()">Send Prove Request</button>
+<pre id="out"></pre>
+<script>
+async function testProve() {
+  const res = await fetch('https://basin-zig-production.up.railway.app/v1/prove', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      challenge: "hello-from-phone",
+      publicKey: "test-key"
+    })
+  });
+  document.getElementById('out').textContent = await res.text();
+}
+</script>
+</body>
+</html>
