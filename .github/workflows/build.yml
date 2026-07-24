@@ -20,7 +20,6 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
-      # Cache Zig to make builds instant
       - name: Cache Zig Build Files
         uses: actions/cache@v4
         with:
@@ -44,4 +43,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: basin-wasm
-          path: zig-out/bin/basin.wasm
+          path: zig-out/bin/wasm/basin.wasm  # <-- FIXED PATH
