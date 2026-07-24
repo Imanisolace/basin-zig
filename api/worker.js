@@ -28,12 +28,18 @@ async function hashTo32Bytes(str) {
     return out;
 }
 
+// FIXED: Auto-pads to 32 bytes so ReqBin doesn't delete zeros
 function hexToBytes(hex) {
     if (!hex) throw new Error("hex is empty");
     if (hex.startsWith('0x')) hex = hex.slice(2);
-    if (hex.length % 2!== 0) throw new Error(`hex length must be even, got ${hex.length}`);
+    
+    // Pad to 64 chars = 32 bytes. This fixes ReqBin trimming
+    hex = hex.padEnd(64, '0'); 
+    
+    if (hex.length!== 64) throw new Error(`hex must be 64 chars after padding, got ${hex.length}`);
+    
     const buf = Buffer.from(hex, 'hex');
-    console.log(`[hexToBytes] input len: ${hex.length} chars -> ${buf.length} bytes`);
+    console.log(`[hexToBytes] padded to: ${hex.length} chars -> ${buf.length} bytes`);
     return new Uint8Array(buf);
 }
 
@@ -111,7 +117,7 @@ parentPort.on('message', async ({ id, type, items, target_index, inputs, leaf, r
 
             const verified = api_verify_proof(leafPtr, rootPtr, proofLen, siblingsPtr, flagsPtr);
             console.log("[verify] result:", verified);
-            result = { verified };
+            result = { verified: verified === 1 };
 
         } else {
             throw new Error(`Unknown type: ${type}`);
