@@ -9,8 +9,8 @@ COPY package*.json ./
 RUN npm install --omit=dev
 
 # 4. Copy app code + pre-built wasm
-COPY api/server.js ./
-COPY api/worker.js ./
+COPY server.js ./
+COPY worker.js ./
 COPY basin.wasm ./
 
 # 5. Expose port
