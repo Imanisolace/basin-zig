@@ -1,7 +1,6 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
-import poseidonPkg from 'poseidon-lite'; // npm i poseidon-lite
-const poseidon = poseidonPkg.poseidon || poseidonPkg.default || poseidonPkg;
+import poseidon from 'poseidon-lite'; // import as default function
 
 const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
@@ -33,10 +32,11 @@ async function hashTo32Bytes(input) { // input can be string or number
     const inputs = [];
     for(let i = 0; i < bytes.length; i += 31) {
         const chunk = bytes.slice(i, i + 31);
-        inputs.push(BigInt('0x' + Buffer.from(chunk).toString('hex') || '0'));
+        const hex = Buffer.from(chunk).toString('hex') || '0';
+        inputs.push(BigInt('0x' + hex));
     }
     if(inputs.length === 0) inputs.push(0n);
-    const hash = poseidon(inputs);
+    const hash = poseidon(inputs); // poseidon is now a function
     return new Uint8Array(Buffer.from(hash.toString(16).padStart(64, '0'), 'hex'));
 }
 
