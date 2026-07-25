@@ -29,8 +29,8 @@ app.get('/', (req, res) => {
   res.json({ name: 'Basin ZK API v1', status: 'live', workers: NUM_WORKERS })
 })
 
-// 3. Spawn workers - SAFE FOR 1GB RAM
-const NUM_WORKERS = Math.min(os.cpus().length, 4)
+// 3. Spawn workers - 2 is SAFE FOR 512MB-1GB RAM
+const NUM_WORKERS = 2 // CHANGED FROM 4 TO 2
 const workers = []
 
 console.log(`Starting ${NUM_WORKERS} workers...`)
@@ -43,12 +43,19 @@ for (let i = 0; i < NUM_WORKERS; i++) {
   workers.push(worker)
 }
 
-// 4. Example API route - replace with your ZK logic
+// 4. Route messages to workers - ROUND ROBIN
+let nextWorker = 0
 app.post('/prove', async (req, res) => {
   try {
-    // Example: send work to first worker
-    // workers[0].postMessage(req.body)
-    res.json({ status: 'queued' })
+    const worker = workers[nextWorker]
+    nextWorker = (nextWorker + 1) % NUM_WORKERS
+    
+    const id = Date.now().toString()
+    worker.postMessage({ id,...req.body })
+    
+    worker.once('message', (msg) => {
+      if (msg.id === id) res.json(msg.result || { error: msg.error })
+    })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: e.message })
