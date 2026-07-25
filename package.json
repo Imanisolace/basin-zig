@@ -4,7 +4,7 @@
   "type": "module",
   "dependencies": {
     "express": "^4.19.2",
-    "poseidon-lite": "^0.0.3"
+    "poseidon-lite": "*"
   },
   "engines": {
     "node": ">=20"
