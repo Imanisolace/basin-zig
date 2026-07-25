@@ -6,120 +6,72 @@ const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
 const instance = await WebAssembly.instantiate(wasmModuleCompiled);
 
-const {
-    set_leaf_byte,
-    api_compute_root,
-    api_generate_proof,
-    api_verify_proof,
-    get_root_ptr,
-    get_proof_len,
-    get_proof_step_side,
-    get_proof_step_sibling_ptr,
-    memory
-} = instance.exports;
+const { set_leaf_byte, api_compute_root, api_generate_proof, api_verify_proof, get_root_ptr, get_proof_len, get_proof_step_side, get_proof_step_sibling_ptr, memory } = instance.exports;
 
 const OUTPUT_SIZE = 32;
-const FIELD_SIZE = 31; // Poseidon outputs fit in 31 bytes for Goldilocks
 const encoder = new TextEncoder();
 
-// REAL: Poseidon hash anything > 32 bytes down to 32 bytes
-async function hashTo32Bytes(str) {
-    const bytes = encoder.encode(str);
-    // Convert bytes to BigInts for Poseidon
+async function hashTo32Bytes(input) { // input can be string or number
+    let bytes;
+    if(typeof input === 'number') {
+        bytes = Buffer.from(input.toString(16).padStart(64, '0'), 'hex');
+    } else {
+        bytes = encoder.encode(String(input));
+    }
+
     const inputs = [];
-    for(let i = 0; i < bytes.length; i += FIELD_SIZE) {
-        const chunk = bytes.slice(i, i + FIELD_SIZE);
-        inputs.push(BigInt('0x' + Buffer.from(chunk).toString('hex')));
+    for(let i = 0; i < bytes.length; i += 31) {
+        const chunk = bytes.slice(i, i + 31);
+        inputs.push(BigInt('0x' + Buffer.from(chunk).toString('hex') || '0'));
     }
     if(inputs.length === 0) inputs.push(0n);
-
-    const hash = poseidon(inputs); // returns BigInt
-    const hex = hash.toString(16).padStart(64, '0');
-    return new Uint8Array(Buffer.from(hex, 'hex'));
+    const hash = poseidon(inputs);
+    return new Uint8Array(Buffer.from(hash.toString(16).padStart(64, '0'), 'hex'));
 }
 
-// FIXED: Auto-pads to 32 bytes so ReqBin doesn't delete zeros
 function hexToBytes(hex) {
     if (!hex) throw new Error("hex is empty");
-    if (hex.startsWith('0x')) hex = hex.slice(2);
-    hex = hex.padEnd(64, '0');
-    if (hex.length!== 64) throw new Error(`hex must be 64 chars after padding, got ${hex.length}`);
+    hex = hex.replace('0x','').padEnd(64, '0');
     return new Uint8Array(Buffer.from(hex, 'hex'));
 }
 
 parentPort.on('message', async ({ id, type, items, target_index, inputs, leaf, root, proof }) => {
     try {
         let result;
-
         if (type === 'hash') {
-            if (!inputs || inputs.length!== 3) throw new Error("Need 3 inputs");
-            const h1 = await hashTo32Bytes(inputs[0]);
-            const h2 = await hashTo32Bytes(inputs[1]);
-            const h3 = await hashTo32Bytes(inputs[2]);
-            const combined = poseidon([BigInt('0x'+Buffer.from(h1).toString('hex')), BigInt('0x'+Buffer.from(h2).toString('hex')), BigInt('0x'+Buffer.from(h3).toString('hex'))]);
+            const h = await Promise.all(inputs.map(i => hashTo32Bytes(i)));
+            const combined = poseidon(h.map(b => BigInt('0x'+Buffer.from(b).toString('hex'))));
             result = { hash: "0x" + combined.toString(16).padStart(64, '0') };
-
-        } else if (type === 'prove') {
-            for (let leafIdx = 0; leafIdx < items.length; leafIdx++) {
-                const item = items[leafIdx];
-                if (typeof item!== 'string') throw new Error(`Item ${leafIdx} must be a string`);
-                const rawBytes = await hashTo32Bytes(item); // NOW POSEIDON
-                for (let b = 0; b < OUTPUT_SIZE; b++) {
-                    set_leaf_byte(leafIdx, b, rawBytes[b]);
-                }
+        }
+        else if (type === 'prove') {
+            for (let i = 0; i < items.length; i++) {
+                const rawBytes = await hashTo32Bytes(items[i]);
+                for (let b = 0; b < OUTPUT_SIZE; b++) set_leaf_byte(i, b, rawBytes[b]);
             }
-
-            const rootSuccess = api_compute_root(items.length);
-            const proofSuccess = api_generate_proof(items.length, target_index);
-            if (!rootSuccess ||!proofSuccess) throw new Error("WASM proof failed");
-
+            if(!api_compute_root(items.length) ||!api_generate_proof(items.length, target_index)) throw new Error("WASM failed");
             const buf = memory.buffer;
             const rootHash = Buffer.from(buf, get_root_ptr(), OUTPUT_SIZE).toString('hex');
-            const proofLen = get_proof_len();
-            const steps = [];
-            for (let i = 0; i < proofLen; i++) {
-                steps.push({
-                    is_right: get_proof_step_side(i),
-                    sibling: Buffer.from(buf, get_proof_step_sibling_ptr(i), OUTPUT_SIZE).toString('hex')
-                });
-            }
-            result = { root: "0x" + rootHash, proof: { steps, length: proofLen } };
-
-        } else if (type === 'verify') {
-            const leafBytes = hexToBytes(leaf);
-            const rootBytes = hexToBytes(root);
-
-            const proofLen = proof.steps.length;
-            const siblingsBuf = new Uint8Array(proofLen * OUTPUT_SIZE);
-            const flagsBuf = new Uint8Array(proofLen);
-
-            for (let i = 0; i < proofLen; i++) {
-                const siblingBytes = hexToBytes(proof.steps[i].sibling);
-                siblingsBuf.set(siblingBytes, i * OUTPUT_SIZE);
-                flagsBuf[i] = proof.steps[i].is_right? 1 : 0;
-            }
-
-            const mem = new Uint8Array(memory.buffer);
-            const leafPtr = 0;
-            const rootPtr = leafPtr + OUTPUT_SIZE;
-            const siblingsPtr = rootPtr + OUTPUT_SIZE;
-            const flagsPtr = siblingsPtr + siblingsBuf.length;
-
-            mem.set(leafBytes, leafPtr);
-            mem.set(rootBytes, rootPtr);
-            mem.set(siblingsBuf, siblingsPtr);
-            mem.set(flagsBuf, flagsPtr);
-
-            const verified = api_verify_proof(leafPtr, rootPtr, proofLen, siblingsPtr, flagsPtr);
-            result = { verified: verified === 1 };
-
-        } else {
-            throw new Error(`Unknown type: ${type}`);
+            const steps = Array.from({length: get_proof_len()}, (_,i) => ({
+                is_right: get_proof_step_side(i),
+                sibling: Buffer.from(buf, get_proof_step_sibling_ptr(i), OUTPUT_SIZE).toString('hex')
+            }));
+            result = { root: "0x" + rootHash, proof: { steps } };
         }
-
+        else if (type === 'verify') {
+            const leafBytes = hexToBytes(leaf); const rootBytes = hexToBytes(root);
+            const siblingsBuf = new Uint8Array(proof.steps.length * OUTPUT_SIZE);
+            const flagsBuf = new Uint8Array(proof.steps.length);
+            proof.steps.forEach((s,i) => {
+                siblingsBuf.set(hexToBytes(s.sibling), i * OUTPUT_SIZE);
+                flagsBuf[i] = s.is_right? 1 : 0;
+            });
+            const mem = new Uint8Array(memory.buffer);
+            mem.set(leafBytes, 0); mem.set(rootBytes, 32); mem.set(siblingsBuf, 64); mem.set(flagsBuf, 64 + siblingsBuf.length);
+            const verified = api_verify_proof(0, 32, proof.steps.length, 64, 64 + siblingsBuf.length);
+            result = { verified: verified === 1 };
+        }
         parentPort.postMessage({ id, result });
     } catch (err) {
-        console.error("[worker error]", err);
         parentPort.postMessage({ id, error: err.message });
     }
 });
