@@ -2,12 +2,26 @@ import { parentPort } from 'worker_threads';
 import fs from 'fs';
 import { buildPoseidon } from 'circomlibjs';
 
+// Crash logging so we see errors in Railway
+process.on('uncaughtException', (err) => {
+  console.error('Worker Uncaught:', err);
+  process.exit(1);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Worker Unhandled:', err);
+  process.exit(1);
+});
+
+console.log('Worker: Loading circomlibjs...');
 const poseidon = await buildPoseidon(); // circomlibjs needs async init
 const F = poseidon.F;
+console.log('Worker: circomlibjs loaded');
 
+console.log('Worker: Loading basin.wasm...');
 const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
 const instance = await WebAssembly.instantiate(wasmModuleCompiled);
+console.log('Worker: WASM loaded');
 
 const { 
   set_leaf_byte, 
@@ -92,6 +106,7 @@ parentPort.on('message', async ({ id, type, items, target_index, inputs, leaf, r
         }
         parentPort.postMessage({ id, result });
     } catch (err) {
+        console.error('Worker Message Error:', err);
         parentPort.postMessage({ id, error: err.message });
     }
 });
