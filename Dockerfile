@@ -4,14 +4,12 @@ FROM node:20-slim
 # 2. Set working dir
 WORKDIR /app
 
-# 3. Install deps - FORCE DELETE OLD CACHE FIRST
+# 3. Install deps - NUKE OLD CACHE FIRST
 COPY package*.json ./
-RUN rm -rf node_modules package-lock.json && npm install --omit=dev
+RUN rm -rf node_modules package-lock.json && npm cache clean --force && npm install --omit=dev
 
 # 4. Copy app code + pre-built wasm
-COPY server.js ./
-COPY worker.js ./
-COPY basin.wasm ./
+COPY . .
 
 # 5. Expose port
 EXPOSE 8080
