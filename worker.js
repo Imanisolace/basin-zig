@@ -1,7 +1,7 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
 import poseidonPkg from 'poseidon-lite'; // npm i poseidon-lite
-const { poseidon } = poseidonPkg;
+const poseidon = poseidonPkg.poseidon || poseidonPkg.default || poseidonPkg;
 
 const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
