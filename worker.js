@@ -1,12 +1,23 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
-import { poseidon } from 'poseidon-lite'; // npm i poseidon-lite
+import poseidonPkg from 'poseidon-lite'; // npm i poseidon-lite
+const { poseidon } = poseidonPkg;
 
 const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
 const instance = await WebAssembly.instantiate(wasmModuleCompiled);
 
-const { set_leaf_byte, api_compute_root, api_generate_proof, api_verify_proof, get_root_ptr, get_proof_len, get_proof_step_side, get_proof_step_sibling_ptr, memory } = instance.exports;
+const { 
+  set_leaf_byte, 
+  api_compute_root, 
+  api_generate_proof, 
+  api_verify_proof, 
+  get_root_ptr, 
+  get_proof_len, 
+  get_proof_step_side, 
+  get_proof_step_sibling_ptr, 
+  memory 
+} = instance.exports;
 
 const OUTPUT_SIZE = 32;
 const encoder = new TextEncoder();
@@ -66,7 +77,10 @@ parentPort.on('message', async ({ id, type, items, target_index, inputs, leaf, r
                 flagsBuf[i] = s.is_right? 1 : 0;
             });
             const mem = new Uint8Array(memory.buffer);
-            mem.set(leafBytes, 0); mem.set(rootBytes, 32); mem.set(siblingsBuf, 64); mem.set(flagsBuf, 64 + siblingsBuf.length);
+            mem.set(leafBytes, 0); 
+            mem.set(rootBytes, 32); 
+            mem.set(siblingsBuf, 64); 
+            mem.set(flagsBuf, 64 + siblingsBuf.length);
             const verified = api_verify_proof(0, 32, proof.steps.length, 64, 64 + siblingsBuf.length);
             result = { verified: verified === 1 };
         }
