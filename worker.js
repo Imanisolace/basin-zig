@@ -1,6 +1,9 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
-import poseidon from 'poseidon-lite'; // import as default function
+import { buildPoseidon } from 'circomlibjs';
+
+const poseidon = await buildPoseidon(); // circomlibjs needs async init
+const F = poseidon.F;
 
 const wasmBuffer = fs.readFileSync('./basin.wasm');
 const wasmModuleCompiled = await WebAssembly.compile(wasmBuffer);
@@ -21,7 +24,7 @@ const {
 const OUTPUT_SIZE = 32;
 const encoder = new TextEncoder();
 
-async function hashTo32Bytes(input) { // input can be string or number
+async function hashTo32Bytes(input) {
     let bytes;
     if(typeof input === 'number') {
         bytes = Buffer.from(input.toString(16).padStart(64, '0'), 'hex');
@@ -36,8 +39,10 @@ async function hashTo32Bytes(input) { // input can be string or number
         inputs.push(BigInt('0x' + hex));
     }
     if(inputs.length === 0) inputs.push(0n);
-    const hash = poseidon(inputs); // poseidon is now a function
-    return new Uint8Array(Buffer.from(hash.toString(16).padStart(64, '0'), 'hex'));
+    
+    const hash = poseidon(inputs); // returns field element
+    const hashHex = F.toString(hash); // convert to hex string
+    return new Uint8Array(Buffer.from(hashHex.padStart(64, '0'), 'hex'));
 }
 
 function hexToBytes(hex) {
@@ -52,7 +57,8 @@ parentPort.on('message', async ({ id, type, items, target_index, inputs, leaf, r
         if (type === 'hash') {
             const h = await Promise.all(inputs.map(i => hashTo32Bytes(i)));
             const combined = poseidon(h.map(b => BigInt('0x'+Buffer.from(b).toString('hex'))));
-            result = { hash: "0x" + combined.toString(16).padStart(64, '0') };
+            const combinedHex = F.toString(combined);
+            result = { hash: "0x" + combinedHex.padStart(64, '0') };
         }
         else if (type === 'prove') {
             for (let i = 0; i < items.length; i++) {
