@@ -19,8 +19,9 @@ pub const Hash = [32]u8;
 
 fn poseidonPerm(state: *[3]u64, round: usize) void {
     for (0..3) |i| state[i] +%= C[round * 3 + i];
+    // Full rounds first 4 and last 22
     if (round < 4 or round >= 4 + 22) {
-        for (0..3) |i| state[i] = state[i] *% state[i] *% state[i] *% state[i] *% state[i];
+        for (0..3) |i| state[i] = state[i] *% state[i] *% state[i] *% state[i] *% state[i]; // x^5
     }
     var new: [3]u64 =.{0,0,0};
     for (0..3) |i| {
@@ -55,7 +56,7 @@ fn hashPair(left: Hash, right: Hash) Hash {
 
 pub const ProofStep = struct {
     sibling: Hash,
-    is_left: bool,
+    is_left: bool, // true if current node was right child
 };
 
 pub const MerkleProof = struct {
@@ -67,7 +68,6 @@ pub const MerkleProof = struct {
     }
 };
 
-// CHANGED: now takes allocator to match your test
 pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
     if (leaves.len == 0) return [_]u8{0} ** 32;
     var buf = try allocator.alloc(Hash, leaves.len);
@@ -80,7 +80,7 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
         var i: usize = 0;
         while (i < n) : (i += 2) {
             const l = buf[i];
-            const r = if (i + 1 < n) buf[i + 1] else l;
+            const r = if (i + 1 < n) buf[i + 1] else l; // duplicate last if odd
             buf[i / 2] = hashPair(l, r);
         }
         n = (n + 1) / 2;
@@ -88,8 +88,10 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
     return buf[0];
 }
 
-// CHANGED: now takes allocator to match your test
-pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, mut index: usize)!MerkleProof {
+pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, index: usize)!MerkleProof {
+    if (leaves.len == 0) return error.EmptyTree;
+    var idx = index; // make it mutable
+
     var buf = try allocator.alloc(Hash, leaves.len);
     defer allocator.free(buf);
     for (leaves, 0..) |leaf, i| buf[i] = hashBytes(leaf);
@@ -100,11 +102,11 @@ pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, mut ind
     var n = leaves.len;
 
     while (n > 1) {
-        const sibling_idx = if (index % 2 == 0) index + 1 else index - 1;
-        const sib = if (sibling_idx < n) buf[sibling_idx] else buf[index];
-        steps[step_idx] =.{.sibling = sib,.is_left = index % 2 == 1 };
+        const sibling_idx = if (idx % 2 == 0) idx + 1 else idx - 1;
+        const sib = if (sibling_idx < n) buf[sibling_idx] else buf[idx];
+        steps[step_idx] =.{.sibling = sib,.is_left = idx % 2 == 1 };
         step_idx += 1;
-        index /= 2;
+        idx /= 2;
 
         var i: usize = 0;
         while (i < n) : (i += 2) {
