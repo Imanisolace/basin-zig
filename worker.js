@@ -1,6 +1,6 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
-import { buildPoseidon } from 'circomlibjs';
+import { buildPoseidon } from 'circomlib'; // CHANGED FROM circomlibjs
 
 // Crash logging so we see errors in Railway
 process.on('uncaughtException', (err) => {
@@ -12,10 +12,10 @@ process.on('unhandledRejection', (err) => {
   process.exit(1);
 });
 
-console.log('Worker: Loading circomlibjs...');
-const poseidon = await buildPoseidon(); // circomlibjs needs async init
+console.log('Worker: Loading circomlib...');
+const poseidon = await buildPoseidon(); // circomlib also needs async init
 const F = poseidon.F;
-console.log('Worker: circomlibjs loaded');
+console.log('Worker: circomlib loaded');
 
 console.log('Worker: Loading basin.wasm...');
 const wasmBuffer = fs.readFileSync('./basin.wasm');
