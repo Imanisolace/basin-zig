@@ -56,5 +56,5 @@ pub fn computeRoot(leaves: []const u64) u64 {
 
 test "compiles" {
     const root = computeRoot(&[_]u64{1,2,3,4});
-    try std.testing.expect(root!= 0);
+    try std.testing.expect(root != 0);
 }
