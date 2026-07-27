@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "express": "^4.19.2",
-    "circomlib": "^0.5.4"
+    "express": "^4.19.2"
   },
   "engines": {
-    "node":  ">=20"
+    "node": "20.x"
   }
 }
