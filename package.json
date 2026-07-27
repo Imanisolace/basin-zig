@@ -8,5 +8,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "web-worker": false
   }
 }
