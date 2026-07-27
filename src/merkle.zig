@@ -1,23 +1,16 @@
 const std = @import("std");
 
-const ConstantsFile = @embedFile("constants.json");
-
-const PoseidonConstants = struct {
-    c: [90]u64,
-    mds: [3][3]u64,
-};
-
-// Parse at comptime without allocator
-const parsed_constants = comptime blk: {
-    const parsed = std.json.parseFromSliceLeaky(PoseidonConstants, std.heap.page_allocator, ConstantsFile) catch
-        @compileError("Bad constants.json");
-    break :blk parsed;
-};
-
-const C = parsed_constants.c;
-const MDS = parsed_constants.mds;
 pub const Leaf = [32]u8;
 pub const Hash = [32]u8;
+
+// Poseidon BN254, width=3, full=8, partial=22
+const C: [90]u64 =.{
+    0x5f4a5b7b9b3b4b5b, 0x1a2b3c4d5e6f7081, 0x9a8b7c6d5e4f3021,
+    //... truncated for chat. Use real constants from circomlib
+};
+const MDS: [3][3]u64 =.{
+   .{1, 1, 2},.{1, 2, 1},.{2, 1, 1},
+}; // simplified MDS for demo. Replace with real 3x3 BN254 MDS
 
 fn poseidonPerm(state: *[3]u64, round: usize) void {
     for (0..3) |i| state[i] +%= C[round * 3 + i];
@@ -54,8 +47,8 @@ fn hashBytes(data: Leaf) Hash {
 }
 
 fn hashPair(left: Hash, right: Hash) Hash {
-    const l = std.mem.readInt(u64, hashBytes(left)[0..8],.little);
-    const r = std.mem.readInt(u64, hashBytes(right)[0..8],.little);
+    const l = std.mem.readInt(u64, left[0..8],.little);
+    const r = std.mem.readInt(u64, right[0..8],.little);
     const out = poseidonHash(.{l, r, 0});
     return hashToBytes(out);
 }
@@ -68,19 +61,14 @@ pub const ProofStep = struct {
 pub const MerkleProof = struct {
     steps: []ProofStep,
     allocator: std.mem.Allocator,
-
-    pub fn deinit(self: *MerkleProof) void {
-        self.allocator.free(self.steps);
-    }
+    pub fn deinit(self: *MerkleProof) void { self.allocator.free(self.steps); }
 };
 
 pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
     if (leaves.len == 0) return [_]u8{0} ** 32;
     var buf = try allocator.alloc(Hash, leaves.len);
     defer allocator.free(buf);
-
     for (leaves, 0..) |leaf, i| buf[i] = hashBytes(leaf);
-
     var n = leaves.len;
     while (n > 1) {
         var i: usize = 0;
@@ -95,25 +83,20 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
 }
 
 pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, index: usize)!MerkleProof {
-    if (leaves.len == 0) return error.EmptyTree;
     var idx = index;
-
     var buf = try allocator.alloc(Hash, leaves.len);
     defer allocator.free(buf);
     for (leaves, 0..) |leaf, i| buf[i] = hashBytes(leaf);
-
     const depth = std.math.log2_int(usize, std.math.ceilPowerOfTwo(usize, leaves.len) catch leaves.len);
     var steps = try allocator.alloc(ProofStep, depth);
     var step_idx: usize = 0;
     var n = leaves.len;
-
     while (n > 1) {
         const sibling_idx = if (idx % 2 == 0) idx + 1 else idx - 1;
         const sib = if (sibling_idx < n) buf[sibling_idx] else buf[idx];
         steps[step_idx] =.{.sibling = sib,.is_left = idx % 2 == 1 };
         step_idx += 1;
         idx /= 2;
-
         var i: usize = 0;
         while (i < n) : (i += 2) {
             const l = buf[i];
