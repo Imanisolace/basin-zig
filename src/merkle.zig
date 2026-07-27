@@ -7,11 +7,11 @@ const PoseidonConstants = struct {
     mds: [3][3]u64,
 };
 
-const parsed_constants = blk: {
-    // Zig 0.14: parseFromSlice(T, allocator, input, options)
-    const allocator = std.heap.page_allocator;
-    const parsed = std.json.parseFromSlice(PoseidonConstants, allocator, ConstantsFile,.{}) catch @compileError("Bad constants.json");
-    break :blk parsed.value;
+// Parse at comptime without allocator
+const parsed_constants = comptime blk: {
+    const parsed = std.json.parseFromSliceLeaky(PoseidonConstants, std.heap.page_allocator, ConstantsFile) catch
+        @compileError("Bad constants.json");
+    break :blk parsed;
 };
 
 const C = parsed_constants.c;
@@ -39,21 +39,25 @@ fn poseidonHash(inputs: [3]u64) u64 {
     return s[0];
 }
 
-fn hashBytes(data: Leaf) u64 {
+fn hashToBytes(x: u64) Hash {
+    var res: Hash = [_]u8{0} ** 32;
+    std.mem.writeInt(u64, res[0..8], x,.little);
+    return res;
+}
+
+fn hashBytes(data: Leaf) Hash {
     const a = std.mem.readInt(u64, data[0..8],.little);
     const b = std.mem.readInt(u64, data[8..16],.little);
     const c = std.mem.readInt(u64, data[16..24],.little);
-    return poseidonHash(.{a ^ b, c, 0});
+    const out = poseidonHash(.{a ^ b, c, 0});
+    return hashToBytes(out);
 }
 
 fn hashPair(left: Hash, right: Hash) Hash {
-    const l = hashBytes(left);
-    const r = hashBytes(right);
+    const l = std.mem.readInt(u64, hashBytes(left)[0..8],.little);
+    const r = std.mem.readInt(u64, hashBytes(right)[0..8],.little);
     const out = poseidonHash(.{l, r, 0});
-    var res: Hash = undefined;
-    std.mem.writeInt(u64, res[0..8], out,.little);
-    @memset(res[8..], 0); // zero rest
-    return res;
+    return hashToBytes(out);
 }
 
 pub const ProofStep = struct {
@@ -75,7 +79,7 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
     var buf = try allocator.alloc(Hash, leaves.len);
     defer allocator.free(buf);
 
-    for (leaves, 0..) |leaf, i| buf[i] = hashBytes(leaf); // leaf is [32]u8 now
+    for (leaves, 0..) |leaf, i| buf[i] = hashBytes(leaf);
 
     var n = leaves.len;
     while (n > 1) {
