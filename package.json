@@ -4,12 +4,9 @@
   "type": "module",
   "dependencies": {
     "express": "^4.19.2",
-    "circomlibjs": "^0.1.7"
+    "circomlib": "^0.5.4"
   },
   "engines": {
     "node": ">=20"
-  },
-  "overrides": {
-    "web-worker": false
   }
 }
