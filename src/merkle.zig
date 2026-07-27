@@ -149,7 +149,7 @@ pub fn generateProof(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]
     var target_idx = leaf_index;
 
     while (current_len > 1) {
-        const is_odd = (target_idx % 2!= 0);
+        const is_odd = (target_idx % 2 != 0);
         const sibling_idx = if (is_odd) target_idx - 1 else target_idx + 1;
 
         if (sibling_idx < current_len) {
