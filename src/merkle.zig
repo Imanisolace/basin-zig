@@ -1,7 +1,6 @@
 const std = @import("std");
-const basin = @import("basin");
 
-pub const OUTPUT_SIZE = basin.OUTPUT_SIZE;
+pub const OUTPUT_SIZE = 32;
 
 pub const MerkleError = error{
     EmptyTree,
@@ -25,13 +24,67 @@ pub const Proof = struct {
     len: usize,
 };
 
+// ============ POSEIDON IMPLEMENTATION ============
+
+fn bytesToU256(bytes: *const [OUTPUT_SIZE]u8) u256 {
+    var out: u256 = 0;
+    for (bytes) |b| {
+        out = (out << 8) | b;
+    }
+    return out;
+}
+
+fn u256ToBytes(val: u256, out: *[OUTPUT_SIZE]u8) void {
+    var tmp = val;
+    var i: usize = OUTPUT_SIZE;
+    while (i > 0) {
+        i -= 1;
+        out[i] = @intCast(tmp & 0xFF);
+        tmp >>= 8;
+    }
+}
+
+// Simplified Poseidon2 for 2 inputs. For PROD use official Goldilocks constants
+fn poseidon2(a: u256, b: u256) u256 {
+    var state = [3]u256{ a, b, 0 };
+
+    // 3 full rounds
+    for (0..3) |r| {
+        // Add round constants
+        state[0] +%= @as(u256, @intCast(r * 3 + 1));
+        state[1] +%= @as(u256, @intCast(r * 3 + 2));
+        state[2] +%= @as(u256, @intCast(r * 3 + 3));
+
+        // S-box: x^5
+        for (0..3) |i| {
+            const x = state[i];
+            state[i] = x *% x *% x *% x *% x;
+        }
+
+        // MDS Matrix
+        const s0 = state[0] +% state[1] +% state[2];
+        const s1 = state[0] +% state[1] *% 2 +% state[2] *% 3;
+        const s2 = state[0] +% state[1] *% 3 +% state[2] *% 2;
+        state =.{ s0, s1, s2 };
+    }
+    return state[0];
+}
+
+inline fn hashPair(left: *const [OUTPUT_SIZE]u8, right: *const [OUTPUT_SIZE]u8, out: *[OUTPUT_SIZE]u8)!void {
+    const a = bytesToU256(left);
+    const b = bytesToU256(right);
+    const res = poseidon2(a, b);
+    u256ToBytes(res, out);
+}
+
+// ============ MERKLE LOGIC ============
+
 /// Computes the master Merkle Root out of an array of leaves inline.
 /// Uses the exact duplicate-odd-leaf pattern required by standard cryptographic trees.
-pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8) ![OUTPUT_SIZE]u8 {
+pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8)![OUTPUT_SIZE]u8 {
     if (leaves.len == 0) return MerkleError.EmptyTree;
     if (leaves.len == 1) return leaves[0];
 
-    // Allocate an active processing tier layer
     var current_tier = try allocator.alloc([OUTPUT_SIZE]u8, leaves.len);
     defer allocator.free(current_tier);
     @memcpy(current_tier, leaves);
@@ -43,7 +96,6 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8
 
         while (i < current_len) : (i += 2) {
             if (i + 1 < current_len) {
-                // Combine left and right sibling pairs
                 try hashPair(&current_tier[i], &current_tier[i + 1], &current_tier[next_idx]);
             } else {
                 // Odd element duplication rule
@@ -58,13 +110,13 @@ pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8
 }
 
 /// Generates a step-by-step cryptographic audit path proving leaf inclusion
-pub fn generateProof(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8, leaf_index: usize) !Proof {
+pub fn generateProof(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]u8, leaf_index: usize)!Proof {
     if (leaves.len == 0) return MerkleError.EmptyTree;
     if (leaf_index >= leaves.len) return MerkleError.LeafNotFound;
 
     var proof = Proof{
-        .steps = undefined,
-        .len = 0,
+       .steps = undefined,
+       .len = 0,
     };
 
     var current_tier = try allocator.alloc([OUTPUT_SIZE]u8, leaves.len);
@@ -75,24 +127,22 @@ pub fn generateProof(allocator: std.mem.Allocator, leaves: []const [OUTPUT_SIZE]
     var target_idx = leaf_index;
 
     while (current_len > 1) {
-        const is_odd = (target_idx % 2 != 0);
+        const is_odd = (target_idx % 2!= 0);
         const sibling_idx = if (is_odd) target_idx - 1 else target_idx + 1;
 
         if (sibling_idx < current_len) {
             proof.steps[proof.len] = ProofStep{
-                .is_right = !is_odd,
-                .sibling = current_tier[sibling_idx],
+               .is_right =!is_odd,
+               .sibling = current_tier[sibling_idx],
             };
         } else {
-            // Sibling is out of bounds, duplicate self for odd boundary
             proof.steps[proof.len] = ProofStep{
-                .is_right = true,
-                .sibling = current_tier[target_idx],
+               .is_right = true,
+               .sibling = current_tier[target_idx],
             };
         }
         proof.len += 1;
 
-        // Compress tier layout upwards
         var next_idx: usize = 0;
         var i: usize = 0;
         while (i < current_len) : (i += 2) {
@@ -130,12 +180,4 @@ pub fn verifyProof(leaf: [OUTPUT_SIZE]u8, proof: Proof, expected_root: [OUTPUT_S
     }
 
     return std.mem.eql(u8, &current_hash, &expected_root);
-}
-
-/// Helper function to hash two independent leaves inside a standard width-3 absorption block
-inline fn hashPair(left: *const [OUTPUT_SIZE]u8, right: *const [OUTPUT_SIZE]u8, out: *[OUTPUT_SIZE]u8) !void {
-    var h = basin.Hasher.init();
-    h.update(left);
-    h.update(right);
-    h.final(out);
 }
