@@ -1,35 +1,31 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
 import path from 'path';
-import { createHash } from 'crypto'; // added for debug if needed
+import { createHash } from 'crypto'; // <-- ADDED
 
-// Production crash logging and exception sandboxing
 process.on('uncaughtException', (err) => { console.error('Worker Uncaught:', err); process.exit(1); });
 process.on('unhandledRejection', (err) => { console.error('Worker Unhandled:', err); process.exit(1); });
 
-// BN254 Prime Field Order Size Definition
 const FIELD_SIZE = BigInt("21888242871839275222246405745257275088548364400416034343698204186575808495617");
 
 const F = {
     add: (a, b) => (a + b) % FIELD_SIZE,
     mul: (a, b) => (a * b) % FIELD_SIZE,
-    pow: (a, e) => {
-        let r = 1n;
-        while (e > 0n) {
-            if (e & 1n) r = F.mul(r, a);
-            a = F.mul(a, a);
-            e >>= 1n;
-        }
-        return r;
+    pow: (a, e) => { 
+        let r = 1n; 
+        while (e > 0n) { 
+            if (e & 1n) r = F.mul(r, a); 
+            a = F.mul(a, a); 
+            e >>= 1n; 
+        } 
+        return r; 
     },
     toString: (b) => b.toString(16),
 };
 
-// Streamlined data extraction
 const rawConstants = JSON.parse(fs.readFileSync(path.resolve('./constants.json'), 'utf8'));
 const C = rawConstants.map(hexStr => BigInt(hexStr));
 
-// Full MDS Diffusion Matrix for t=3
 const M = [
     [2n, 1n, 1n],
     [1n, 2n, 1n],
@@ -42,7 +38,6 @@ function poseidon(inputs) {
     state[0] = inputs[0]!== undefined? BigInt(inputs[0]) : 0n;
     state[1] = inputs[1]!== undefined? BigInt(inputs[1]) : 0n;
     let cIdx = 0;
-
     for (let r = 0; r < 4; r++) {
         for (let i = 0; i < t; i++) state[i] = F.add(state[i], C[cIdx++]);
         for (let i = 0; i < t; i++) state[i] = F.pow(state[i], 5n);
@@ -50,7 +45,6 @@ function poseidon(inputs) {
         for (let i = 0; i < t; i++) for (let j = 0; j < t; j++) newState[i] = F.add(newState[i], F.mul(M[i][j], state[j]));
         state = newState;
     }
-
     for (let r = 0; r < 56; r++) {
         for (let i = 0; i < t; i++) state[i] = F.add(state[i], C[cIdx++]);
         state[0] = F.pow(state[0], 5n);
@@ -58,7 +52,6 @@ function poseidon(inputs) {
         for (let i = 0; i < t; i++) for (let j = 0; j < t; j++) newState[i] = F.add(newState[i], F.mul(M[i][j], state[j]));
         state = newState;
     }
-
     for (let r = 0; r < 4; r++) {
         for (let i = 0; i < t; i++) state[i] = F.add(state[i], C[cIdx++]);
         for (let i = 0; i < t; i++) state[i] = F.pow(state[i], 5n);
@@ -69,21 +62,20 @@ function poseidon(inputs) {
     return state[0];
 }
 
-// ===== LINEAR WASM TREE STORAGE MANAGEMENT LAYER =====
 async function initWorker() {
     console.log('Worker: Streamlined Poseidon Engine Context Initialized Successfully');
     const wasmBuffer = fs.readFileSync('./basin.wasm');
     const { instance } = await WebAssembly.instantiate(wasmBuffer);
-    const {
-        set_leaf_byte,
-        api_compute_root,
-        api_generate_proof,
-        api_verify_proof,
-        get_root_ptr,
-        get_proof_len,
-        get_proof_step_side,
-        get_proof_step_sibling_ptr,
-        memory
+    const { 
+        set_leaf_byte, 
+        api_compute_root, 
+        api_generate_proof, 
+        api_verify_proof, 
+        get_root_ptr, 
+        get_proof_len, 
+        get_proof_step_side, 
+        get_proof_step_sibling_ptr, 
+        memory 
     } = instance.exports;
 
     const OUTPUT_SIZE = 32;
@@ -118,7 +110,7 @@ async function initWorker() {
                 }
                 else if (type === 'prove') {
                     for (let i = 0; i < items.length; i++) {
-                        const rawBytes = await hashTo32Bytes(items[i]);
+                        const rawBytes = await hashTo32Bytes(items[i]); // Still Poseidon for now
                         for (let b = 0; b < OUTPUT_SIZE; b++) set_leaf_byte(i, b, rawBytes[b]);
                     }
                     if (!api_compute_root(items.length) ||!api_generate_proof(items.length, target_index)) {
@@ -126,49 +118,38 @@ async function initWorker() {
                     }
                     const buf = memory.buffer;
                     const rootHash = Buffer.from(buf, get_root_ptr(), OUTPUT_SIZE).toString('hex');
-                    const steps = Array.from({ length: get_proof_len() }, (_, i) => ({
-                        is_right: get_proof_step_side(i) === 1,
-                        sibling: Buffer.from(buf, get_proof_step_sibling_ptr(i), OUTPUT_SIZE).toString('hex')
+                    const steps = Array.from({ length: get_proof_len() }, (_, i) => ({ 
+                        is_right: get_proof_step_side(i) === 1, 
+                        sibling: Buffer.from(buf, get_proof_step_sibling_ptr(i), OUTPUT_SIZE).toString('hex') 
                     }));
                     result = { root: "0x" + rootHash, proof: { steps } };
                 }
                 else if (type === 'verify') {
-                    // DEBUG VERSION
-                    const leafBytes = await hashTo32Bytes(leaf); // Poseidon hash
+                    // FINAL FIX: WASM uses SHA256 for leaves, not Poseidon
+                    const leafBytes = createHash('sha256').update(leaf).digest();
                     const rootBytes = hexToBytes(root);
-
-                    console.log("===== VERIFY DEBUG START =====");
-                    console.log("Input leaf:", leaf);
-                    console.log("Leaf hash to WASM:", Buffer.from(leafBytes).toString('hex'));
-                    console.log("Input root:", root);
-                    console.log("Root to WASM:", Buffer.from(rootBytes).toString('hex'));
 
                     const siblingsBuf = new Uint8Array(proof.steps.length * OUTPUT_SIZE);
                     const flagsBuf = new Uint8Array(proof.steps.length);
 
-                    proof.steps.forEach((s, i) => {
-                        siblingsBuf.set(hexToBytes(s.sibling), i * OUTPUT_SIZE);
-                        flagsBuf[i] = s.is_right? 1 : 0;
+                    proof.steps.forEach((s, i) => { 
+                        siblingsBuf.set(hexToBytes(s.sibling), i * OUTPUT_SIZE); 
+                        flagsBuf[i] = s.is_right? 1 : 0; 
                     });
 
                     const mem = new Uint8Array(memory.buffer);
-
-                    // Bumped offset to avoid collision
                     const startOffset = 1024 * 256;
                     const leafOffset = startOffset;
                     const rootOffset = leafOffset + 32;
                     const siblingsOffset = rootOffset + 32;
                     const flagsOffset = siblingsOffset + siblingsBuf.length;
 
-                    mem.set(leafBytes, leafOffset);
-                    mem.set(rootBytes, rootOffset);
-                    mem.set(siblingsBuf, siblingsOffset);
+                    mem.set(leafBytes, leafOffset); 
+                    mem.set(rootBytes, rootOffset); 
+                    mem.set(siblingsBuf, siblingsOffset); 
                     mem.set(flagsBuf, flagsOffset);
 
                     const verified = api_verify_proof(leafOffset, rootOffset, proof.steps.length, siblingsOffset, flagsOffset);
-                    console.log("WASM returned:", verified);
-                    console.log("===== VERIFY DEBUG END =====");
-                    
                     result = { verified: verified === 1 };
                 }
                 parentPort.postMessage({ id, result });
