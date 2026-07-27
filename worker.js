@@ -1,6 +1,7 @@
 import { parentPort } from 'worker_threads';
 import fs from 'fs';
-import { buildPoseidon } from 'circomlib'; // CHANGED FROM circomlibjs
+import pkg from 'circomlib'; // FIX: CJS import
+const { buildPoseidon } = pkg;
 
 // Crash logging so we see errors in Railway
 process.on('uncaughtException', (err) => {
