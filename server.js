@@ -14,8 +14,15 @@ const PORT = process.env.PORT || 8080
 app.use(express.json({ limit: '10mb' }))
 app.use(express.static(__dirname))
 
+// HELPER: Handle hex with or without 0x
+function hexToBytes(hex) {
+  hex = hex.replace(/^0x/, ''); // remove 0x if present
+  if (hex.length % 2!== 0) hex = '0' + hex; // pad if odd
+  return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+}
+
 // 1. Spawn workers - 2 is SAFE FOR 512MB-1GB RAM on Railway
-const NUM_WORKERS = 2 
+const NUM_WORKERS = 2
 const workers = []
 
 console.log(`Starting ${NUM_WORKERS} workers...`)
@@ -33,10 +40,10 @@ let nextWorker = 0
 
 // 3. Healthcheck for Railway
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     uptime: process.uptime(),
-    workers: workers.length 
+    workers: workers.length
   })
 })
 
@@ -52,11 +59,9 @@ app.post('/prove', async (req, res) => {
     nextWorker = (nextWorker + 1) % NUM_WORKERS
 
     const id = Date.now().toString() + Math.random().toString(16).slice(2)
-    
-    // THE KEY FIX: add type: 'prove' so worker.js knows what to do
+
     worker.postMessage({ id, type: 'prove',...req.body })
 
-    // Timeout in case worker hangs
     const timeout = setTimeout(() => {
       return res.status(504).json({ error: "Request timed out after 30s" })
     }, 30000)
@@ -81,8 +86,7 @@ app.post('/verify', async (req, res) => {
     nextWorker = (nextWorker + 1) % NUM_WORKERS
 
     const id = Date.now().toString() + Math.random().toString(16).slice(2)
-    
-    // THE KEY FIX: add type: 'verify'
+
     worker.postMessage({ id, type: 'verify',...req.body })
 
     const timeout = setTimeout(() => {
