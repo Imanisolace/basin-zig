@@ -1,13 +1,13 @@
 const std = @import("std");
 
-const ConstantsFile = @embedFile("constants.json"); // <-- removed../
+const ConstantsFile = @embedFile("constants.json");
 
 const PoseidonConstants = struct {
     c: [90]u64,
     mds: [3][3]u64,
 };
 
-const parsed_constants = blk: { // <-- removed comptime keyword
+const parsed_constants = blk: {
     const parsed = std.json.parseFromSlice(PoseidonConstants, ConstantsFile,.{}) catch @compileError("Bad constants.json");
     break :blk parsed.value;
 };
@@ -24,7 +24,13 @@ fn poseidonPerm(state: *[3]u64, round: usize) void {
         for (0..3) |i| state[i] = state[i] *% state[i] *% state[i] *% state[i] *% state[i];
     }
     var new: [3]u64 =.{0,0,0};
-    for (0..3) |i| for (0..3) |j| new[i] +%= mulMod(MDS[i][j], state[j]);
+    for (0..3) |i| {
+        var sum: u64 = 0;
+        for (0..3) |j| {
+            sum +%= mulMod(MDS[i][j], state[j]); // <-- fixed: use temp sum
+        }
+        new[i] = sum;
+    }
     state.* = new;
 }
 
@@ -38,7 +44,7 @@ fn hashPair(left: u64, right: u64) u64 {
     return poseidonHash(.{left, right, 0});
 }
 
-pub fn computeRoot(leaves: []const u64) u64 {
+pub fn computeRoot(leaves: []const u64) u64 { // <-- only 1 arg now
     var buf: [1024]u64 = undefined;
     @memcpy(buf[0..leaves.len], leaves);
     var n = leaves.len;
@@ -47,7 +53,7 @@ pub fn computeRoot(leaves: []const u64) u64 {
         while (i < n) : (i += 2) {
             const l = buf[i];
             const r = if (i + 1 < n) buf[i + 1] else l;
-            buf[i / 2] = hashPair(l, r);
+            buf[i / 2] = hashPair(l, right: r);
         }
         n = (n + 1) / 2;
     }
