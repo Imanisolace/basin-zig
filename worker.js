@@ -1,4 +1,4 @@
-import { parentPort } from 'worker_threads';import fs from 'fs';
+import { parentPort } from 'worker_threads'; import fs from 'fs';
 // Crash logging
 process.on('uncaughtException', (err) => { console.error('Worker Uncaught:', err); process.exit(1); });
 process.on('unhandledRejection', (err) => { console.error('Worker Unhandled:', err); process.exit(1); });
