@@ -1,57 +1,79 @@
 const std = @import("std");
 const consts = @import("poseidon_consts.zig");
+const Fr = @import("fr.zig").Fr; // <- import your Fr
 
 pub const Leaf = [32]u8;
 pub const Hash = [32]u8;
 
-const T = 3;
-const RF = 8;
-const RP = 56;
-const ROUNDS = RF + RP;
+const T = consts.T; // 3
+const ROUNDS = consts.ROUNDS; // 64
 const C = consts.C;
 const P = consts.P;
 
-fn pow5(x: u64) u64 { return x *% x *% x *% x *% x; }
-
-fn applyP(state: *[T]u64) void {
-    var new: [T]u64 =.{0} ** T;
-    for (0..T) |i| for (0..T) |j| new[i] +%= P[i][j] *% state[j];
-    state.* = new;
+fn sbox(x: Fr) Fr {
+    const x2 = x.mul(x);
+    const x4 = x2.mul(x2);
+    return x4.mul(x); // x^5
 }
 
-fn poseidonPerm(state: *[T]u64, round: usize) void {
-    for (0..T) |i| state[i] +%= C[round * T + i];
-    if (round < RF/2 or round >= RF/2 + RP) {
-        for (0..T) |i| state[i] = pow5(state[i]);
-    } else {
-        state[0] = pow5(state[0]);
+fn matmul(s: [T]Fr) [T]Fr {
+    var out: [T]Fr = undefined;
+    for (0..T) |i| {
+        out[i] = Fr.zero;
+        for (0..T) |j| out[i] = out[i].add(P[i][j].mul(s[j]));
     }
-    applyP(state);
+    return out;
 }
 
-fn poseidonHash(inputs: [T]u64) u64 {
-    var s = inputs;
-    for (0..ROUNDS) |r| poseidonPerm(&s, r);
-    return s[0];
+fn poseidonPerm(state: [T]Fr) [T]Fr {
+    var state = state;
+    var round: usize = 0;
+    const RF = consts.RF; const RP = consts.RP;
+
+    while (round < RF / 2) : (round += 1) {
+        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        for (0..T) |i| state[i] = sbox(state[i]);
+        state = matmul(state);
+    }
+    while (round < RF / 2 + RP) : (round += 1) {
+        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        state[0] = sbox(state[0]);
+        state = matmul(state);
+    }
+    while (round < ROUNDS) : (round += 1) {
+        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        for (0..T) |i| state[i] = sbox(state[i]);
+        state = matmul(state);
+    }
+    return state;
 }
 
-fn toHash(x: u64) Hash {
-    var res: Hash = [_]u8{0} ** 32;
-    std.mem.writeInt(u64, res[0..8], x,.little);
-    return res;
+fn poseidonHash(inputs: [T]Fr) Fr {
+    return poseidonPerm(inputs)[0];
+}
+
+fn frFromBytes(b: [32]u8) Fr {
+    return Fr.fromBytes(b);
+}
+
+fn frToBytes(x: Fr) [32]u8 {
+    return x.toBytes(); // or whatever your Fr has
 }
 
 fn hashLeaf(data: Leaf) Hash {
-    const a = std.mem.readInt(u64, data[0..8],.little);
-    const b = std.mem.readInt(u64, data[8..16],.little);
-    const c = std.mem.readInt(u64, data[16..24],.little);
-    return toHash(poseidonHash(.{a ^ b, c, 0}));
+    var a_bytes: [32]u8 = [_]u8{0} ** 32; @memcpy(a_bytes[0..8], data[0..8]);
+    var b_bytes: [32]u8 = [_]u8{0} ** 32; @memcpy(b_bytes[0..8], data[8..16]);
+    var c_bytes: [32]u8 = [_]u8{0} ** 32; @memcpy(c_bytes[0..8], data[16..24]);
+
+    const a = frFromBytes(a_bytes);
+    const b = frFromBytes(b_bytes);
+    const c = frFromBytes(c_bytes);
+
+    return frToBytes(poseidonHash(.{a.add(b), c, Fr.zero}));
 }
 
 fn hashPair(l: Hash, r: Hash) Hash {
-    const a = std.mem.readInt(u64, l[0..8],.little);
-    const b = std.mem.readInt(u64, r[0..8],.little);
-    return toHash(poseidonHash(.{a, b, 0}));
+    return frToBytes(poseidonHash(.{frFromBytes(l), frFromBytes(r), Fr.zero}));
 }
 
 pub const ProofStep = struct { sibling: Hash, is_left: bool };
