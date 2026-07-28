@@ -19,12 +19,9 @@ pub fn build(b: *std.Build) void {
     });
     wasm.root_module.addImport("basin", basin_mod);
 
-    // Zig 0.14 fix: keep all exports so JS can call them
-    // rdynamic = keep all exported symbols
-    // strip = false = don't remove debug info/exports
-    // single_threaded = required for wasi
-    wasm.rdynamic = true;
-    wasm.strip = false;
+    // Zig 0.14 WASM export fixes
+    wasm.rdynamic = true; // keep all export fn
+    wasm.root_module.strip = false; // don't strip exports
     wasm.single_threaded = true;
 
     b.installArtifact(wasm);
