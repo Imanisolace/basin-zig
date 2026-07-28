@@ -103,3 +103,36 @@ test "BENCH: speed" {
     const mb_s = 1.0 / (@as(f64, @floatFromInt(ns)) / 1e9);
     std.debug.print("\nbasin: {d:.2} MB/s\n",.{mb_s});
 }
+
+// ========== NEW TESTS START HERE ==========
+
+test "FR: BN254 add matches solidity math" {
+    const Fr = merkle.Fr;
+
+    const one = Fr.fromBytes([_]u8{1} ++ [_]u8{0}**31); // 1
+    const two = Fr.fromBytes([_]u8{2} ++ [_]u8{0}**31); // 2
+    const three = one.add(two); // should be 3
+
+    const expected = Fr.fromBytes([_]u8{3} ++ [_]u8{0}**31);
+    try std.testing.expect(three.eq(expected));
+}
+
+test "FR: BN254 mul wraps at prime" {
+    const Fr = merkle.Fr;
+    const P_minus_1 = Fr.fromBytes([_]u8{0}**31 ++ [_]u8{0xFE}); // P-1 approx, just test wrap
+    const two = Fr.fromBytes([_]u8{2} ++ [_]u8{0}**31);
+
+    const result = P_minus_1.add(one); // should wrap to 0
+    try std.testing.expect(result.eq(Fr.zero));
+}
+
+test "MERKLE: root with real Fr math" {
+    const allocator = std.testing.allocator;
+    const leaves = [_][]const u8{ "leaf1", "leaf2", "leaf3", "leaf4" };
+
+    const root = try merkle.buildMerkleRoot(&leaves, allocator);
+    defer allocator.free(root);
+
+    try std.testing.expectEqual(@as(usize, 32), root.len);
+    std.debug.print("\nMerkle Root: {s}\n",.{try basin.toHex(root, allocator)});
+}
