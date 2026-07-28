@@ -6,19 +6,14 @@ pub const RF: usize = 8;
 pub const RP: usize = 56;
 pub const ROUNDS: usize = RF + RP; // 64
 
-comptime {
-    @setEvalBranchQuota(10_000_000); // bump it way up
-}
-
 fn hex(comptime s: []const u8) Fr {
-    var b: [32]u8 = [_]u8{0} ** 32;
-    var i: usize = 0;
-    inline while (i < 32) : (i += 1) { // <- inline while helps
-        const hi = std.fmt.charToDigit(s[2 + i*2], 16) catch 0;
-        const lo = std.fmt.charToDigit(s[2 + i*2 + 1], 16) catch 0;
-        b[31 - i] = (hi << 4) | lo;
-    }
-    return Fr.fromBytes(b);
+    const clean = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
+    var bytes: [32]u8 = undefined;
+    _ = std.fmt.hexToBytes(&bytes, clean) catch unreachable;
+
+    // hexToBytes gives big-endian. Fr.fromBytes probably expects little-endian
+    std.mem.reverse(u8, &bytes);
+    return Fr.fromBytes(bytes);
 }
 
 pub const C: [ROUNDS * T]Fr =.{
