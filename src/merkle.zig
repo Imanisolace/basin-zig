@@ -5,8 +5,8 @@ const Fr = @import("fr.zig").Fr;
 pub const Leaf = [32]u8;
 pub const Hash = [32]u8;
 
-const T = consts.T;
-const ROUNDS = consts.ROUNDS;
+const T = consts.T; // 3
+const ROUNDS = consts.ROUNDS; // 64
 const C = consts.C;
 const P = consts.P;
 
@@ -28,18 +28,22 @@ fn matmul(s: [T]Fr) [T]Fr {
 fn poseidonPerm(state_in: [T]Fr) [T]Fr {
     var state = state_in;
     var round: usize = 0;
-    const RF = consts.RF; const RP = consts.RP;
+    const RF = consts.RF;
+    const RP = consts.RP;
 
+    // Full rounds 1
     while (round < RF / 2) : (round += 1) {
         inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         inline for (0..T) |i| state[i] = sbox(state[i]);
         state = matmul(state);
     }
+    // Partial rounds
     while (round < RF / 2 + RP) : (round += 1) {
         inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         state[0] = sbox(state[0]);
         state = matmul(state);
     }
+    // Full rounds 2
     while (round < ROUNDS) : (round += 1) {
         inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         inline for (0..T) |i| state[i] = sbox(state[i]);
@@ -85,12 +89,15 @@ pub const MerkleProof = struct {
 
 pub fn computeRoot(allocator: std.mem.Allocator, leaves: []const Leaf)!Hash {
     if (leaves.len == 0) return [_]u8{0} ** 32;
-    var buf = try allocator.alloc(Hash, leaves.len); defer allocator.free(buf);
+    var buf = try allocator.alloc(Hash, leaves.len);
+    defer allocator.free(buf);
     for (leaves, 0..) |leaf, i| buf[i] = hashLeaf(leaf);
     var n = leaves.len;
     while (n > 1) {
-        var i: usize = 0; while (i < n) : (i += 2) {
-            const l = buf[i]; const r = if (i + 1 < n) buf[i + 1] else l;
+        var i: usize = 0;
+        while (i < n) : (i += 2) {
+            const l = buf[i];
+            const r = if (i + 1 < n) buf[i + 1] else l;
             buf[i / 2] = hashPair(l, r);
         }
         n = (n + 1) / 2;
@@ -110,14 +117,14 @@ pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, index: 
     const depth = std.math.log2_int(usize, tree_size);
 
     var steps = try allocator.alloc(ProofStep, depth);
-    errdefer allocator.free(steps); // free on error
+    errdefer allocator.free(steps);
 
     var step_idx: usize = 0;
     var n = leaves.len;
     while (n > 1) {
         const sib_idx = if (idx % 2 == 0) idx + 1 else idx - 1;
-        const sib = if (sib_idx < n) buf[sib_idx] else buf[idx]; // duplicate if odd
-        steps[step_idx] =.{.sibling = sib,.is_left = idx % 2 == 1 };
+        const sib = if (sib_idx < n) buf[sib_idx] else buf[idx];
+        steps[step_idx] =.{.sibling = sib,.is_left = idx % 2 == 0 }; // FIX: was == 1
         step_idx += 1;
         idx /= 2;
 
@@ -129,13 +136,16 @@ pub fn generateProof(allocator: std.mem.Allocator, leaves: []const Leaf, index: 
         }
         n = (n + 1) / 2;
     }
-    return MerkleProof{.steps = steps[0..step_idx],.allocator = allocator }; // exact sized slice
+    return MerkleProof{.steps = steps[0..step_idx],.allocator = allocator };
 }
 
 pub fn verifyProof(leaf: Leaf, proof: MerkleProof, root: Hash) bool {
     var cur = hashLeaf(leaf);
     for (proof.steps) |step| {
-        cur = if (step.is_left) hashPair(step.sibling, cur) else hashPair(cur, step.sibling);
+        cur = if (step.is_left)
+            hashPair(cur, step.sibling) // cur was left
+        else
+            hashPair(step.sibling, cur); // cur was right
     }
     return std.mem.eql(u8, &cur, &root);
 }
