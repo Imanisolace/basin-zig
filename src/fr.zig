@@ -1,39 +1,49 @@
 const std = @import("std");
+const big = @import("bigzig");
+
+const P = comptime big.Int(u256).from(u256, 21888242871839275222246405745257275088548364400416034343698204186575808495617);
 
 pub const Fr = struct {
-    limbs: [4]u64, // BN254 fits in 4x64
+    v: big.Int(u256),
 
-    pub const zero = Fr{.limbs = [_]u64{0} ** 4 };
+    pub const zero = Fr{.v = big.Int(u256).init(0) };
+    pub const one = Fr{.v = big.Int(u256).init(1) };
 
     pub fn fromBytes(b: [32]u8) Fr {
-        return Fr{.limbs =.{
-            std.mem.readInt(u64, b[0..8],.little),
-            std.mem.readInt(u64, b[8..16],.little),
-            std.mem.readInt(u64, b[16..24],.little),
-            std.mem.readInt(u64, b[24..32],.little),
-        }};
+        const x = std.mem.readInt(u256, &b,.little);
+        var res = big.Int(u256).from(u256, x);
+        if (res.cmp(P)!=.lt) res = res.mod(P);
+        return Fr{.v = res };
     }
 
     pub fn toBytes(self: Fr) [32]u8 {
+        const x = self.v.to(u256);
         var out: [32]u8 = undefined;
-        std.mem.writeInt(u64, out[0..8], self.limbs[0],.little);
-        std.mem.writeInt(u64, out[8..16], self.limbs[1],.little);
-        std.mem.writeInt(u64, out[16..24], self.limbs[2],.little);
-        std.mem.writeInt(u64, out[24..32], self.limbs[3],.little);
+        std.mem.writeInt(u256, &out, x,.little);
         return out;
     }
 
     pub fn add(self: Fr, other: Fr) Fr {
-        // Fake add for now - real needs mod P. But use u128 to avoid byte overflow
-        var res: [4]u64 = undefined;
-        for (0..4) |i| res[i] = self.limbs[i] +% other.limbs[i];
-        return Fr{.limbs = res};
+        var sum = self.v.add(other.v);
+        if (sum.cmp(P)!=.lt) sum = sum.sub(P);
+        return Fr{.v = sum };
+    }
+
+    pub fn sub(self: Fr, other: Fr) Fr {
+        if (self.v.cmp(other.v) ==.lt) {
+            const tmp = P.sub(other.v).add(self.v);
+            return Fr{.v = tmp };
+        } else {
+            return Fr{.v = self.v.sub(other.v) };
+        }
     }
 
     pub fn mul(self: Fr, other: Fr) Fr {
-        // Fake mul for now
-        var res: [4]u64 = undefined;
-        for (0..4) |i| res[i] = self.limbs[i] *% other.limbs[i];
-        return Fr{.limbs = res};
+        const prod = self.v.mul(other.v);
+        return Fr{.v = prod.mod(P) };
+    }
+
+    pub fn eq(self: Fr, other: Fr) bool {
+        return self.v.cmp(other.v) ==.eq;
     }
 };
