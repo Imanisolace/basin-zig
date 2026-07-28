@@ -1,5 +1,9 @@
-const  std = @import("std");
-const Fr = @import("fr.zig").Fr; // <- change this to wherever your Fr type is
+const std = @import("std");
+const Fr = @import("fr.zig").Fr;
+
+comptime {
+    @setEvalBranchQuota(200_000); // 192 constants * 32 bytes * 2 hex chars = ~12k branches
+}
 
 pub const T: usize = 3;
 pub const RF: usize = 8;
@@ -18,6 +22,7 @@ fn hex(comptime s: []const u8) Fr {
         return Fr.fromBytes(b);
     }
 }
+
 pub const C: [ROUNDS * T]Fr =.{
 hex("0x09c46e9ec68e9bd4fe1faaba294cba38a71aa177534cdd1b6c7dc0dbd0abd7a7"),hex("0x0ee9a592ba9a9518d05986d656f40c2114c4993c11bb29938d21d47304cd8e6e"),hex("0x19b849f69450b06848da1d39bd5e4a4302bb86744edc26238b0878e269ed23e5"),
 hex("0x0c0356530896eec42a97ed937f3135cfc5142b3ae405b8343c1d83ffa604cb81"),hex("0x00f1445235f2148c5986587169fc1bcd887b08d4d00868df5696fff40956e864"),hex("0x265ddfe127dd51bd7239347b758f0a1320eb2cc7450acc1dad47f80c8dcf34d6"),
