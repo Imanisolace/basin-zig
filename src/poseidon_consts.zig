@@ -88,22 +88,22 @@ hex("0x05872c16db0f72a2249ac6ba484bb9c3a3ce97c16d58b68b260eb939f0e6e8a7"),hex("0
 hex("0x1300bdee08bb7824ca20fb80118075f40219b6151d55b5c52b624a7cdeddf6a7"),hex("0x00ef653322b13d6c889bc81715c37d77a6cd267d595c4a8909a5546c7c97cff1"),hex("0x22ead100e8e482674decdab17066c5a26bb1515355d5461a3dc06cc85327cea9"),
 };
 
-// MDS Matrix from M[1] in circomlibjs
+// MDS Matrix M[1] from circomlibjs for BN254 T=3
 pub const P: [T][T]Fr =.{
-   .{
+  .{
         hex("0x109b7f411ba0e4c9b2b70caf5c36a7b194be7c11ad24378bfedb68592ba8118b"),
         hex("0x16ed41e13bb9c0c66ae119424fddbc9314dc9fdbdeea55d6c64543dc4903e0"),
         hex("0x2b90bba00fca0589f617e7dcbfe2e0df706ab40ceb247b791a93b74e36736d")
     },
-   .{
+  .{
         hex("0x2969f27eed31a480b9c36c764379dbca2cc8fdd1415c3dded62940bcde0bd771"),
-        hex("0x0f4e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"),
-        hex("0x1a5f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f2a")
+        hex("0x2e2419f9ec02ec394c9871c832963dc1b89d743c8c7b964029b2311687b1fe23"),
+        hex("0x101071f0032379b697315876690f053d148d4e109f5fb065c8aacc55a0f89bfa")
     },
-   .{
-        hex("0x2b603c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f3b4"),
-        hex("0x3c714d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f4c5d6"),
-        hex("0x4d825e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f5d6e7f8")
+  .{
+        hex("0x143021ec686a3f330d5f9e654638065ce6cd79e28c5b3753326244ee65a1b1a7"),
+        hex("0x176cc029695ad02582a70eff08a6fd99d057e12e58e7d7b6b16cdfabc8ee2911"),
+        hex("0x19a3fc0a56702bf417ba7fee3802593fa644470307043f7773279cd71d25d5e0")
     }
 };
 
