@@ -1,9 +1,7 @@
 const std = @import("std");
 const Fr = @import("fr.zig").Fr;
 
-comptime {
-    @setEvalBranchQuota(200_000); // 192 constants * 32 bytes * 2 hex chars = ~12k branches
-}
+@setEvalBranchQuota(1_000_000); // <- must be top-level, not inside comptime block
 
 pub const T: usize = 3;
 pub const RF: usize = 8;
@@ -11,16 +9,14 @@ pub const RP: usize = 56;
 pub const ROUNDS: usize = RF + RP; // 64
 
 fn hex(comptime s: []const u8) Fr {
-    comptime {
-        var b: [32]u8 = [_]u8{0} ** 32;
-        var i: usize = 0;
-        while (i < 32) : (i += 1) {
-            const hi = std.fmt.charToDigit(s[2 + i*2], 16) catch 0;
-            const lo = std.fmt.charToDigit(s[2 + i*2 + 1], 16) catch 0;
-            b[31 - i] = (hi << 4) | lo;
-        }
-        return Fr.fromBytes(b);
+    var b: [32]u8 = [_]u8{0} ** 32;
+    var i: usize = 0;
+    while (i < 32) : (i += 1) {
+        const hi = std.fmt.charToDigit(s[2 + i*2], 16) catch 0;
+        const lo = std.fmt.charToDigit(s[2 + i*2 + 1], 16) catch 0;
+        b[31 - i] = (hi << 4) | lo;
     }
+    return Fr.fromBytes(b);
 }
 
 pub const C: [ROUNDS * T]Fr =.{
