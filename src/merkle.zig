@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const Fr = @import("fr.zig").Fr; // FIX: made pub
+pub const Fr = @import("fr.zig").Fr;
 const basin = @import("basin");
 
 // Hash 2 Fr elements: poseidon( left || right ) mod P
@@ -24,7 +24,6 @@ pub fn buildMerkleRoot(leaves: []const []const u8, allocator: std.mem.Allocator)
 
     // 1. Hash leaves to Fr
     var current_level = try allocator.alloc(Fr, leaves.len);
-    defer allocator.free(current_level);
 
     for (leaves, 0..) |leaf, i| {
         const h = try basin.poseidonHash(leaf, allocator);
@@ -34,24 +33,26 @@ pub fn buildMerkleRoot(leaves: []const []const u8, allocator: std.mem.Allocator)
         current_level[i] = Fr.fromBytes(arr);
     }
 
-    // 2. Build tree up
-    while (current_level.len > 1) {
-        const next_len = (current_level.len + 1) / 2;
+    // 2. Build tree up. No defers in loop to avoid double free
+    var level_len = current_level.len;
+    while (level_len > 1) {
+        const next_len = (level_len + 1) / 2;
         var next_level = try allocator.alloc(Fr, next_len);
-        defer allocator.free(next_level);
 
         for (0..next_len) |i| {
             const left = current_level[i * 2];
-            const right = if (i * 2 + 1 < current_level.len) current_level[i * 2 + 1] else left; // duplicate if odd
+            const right = if (i * 2 + 1 < level_len) current_level[i * 2 + 1] else left; // duplicate if odd
             next_level[i] = try hashPair(left, right, allocator);
         }
-        allocator.free(current_level);
+        allocator.free(current_level); // free old level
         current_level = next_level;
+        level_len = next_len;
     }
 
     // 3. Return root as bytes
     const root_bytes = current_level[0].toBytes();
     const out = try allocator.alloc(u8, 32);
     @memcpy(out, &root_bytes);
+    allocator.free(current_level); // free final level
     return out;
 }
