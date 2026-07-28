@@ -30,20 +30,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-zig-${{ env.ZIG_VERSION }}-
 
-      - name: Build Native Binaries
+      - name: Build WASM
         run: zig build --summary all
+        # This builds wasm because it's the only artifact in build.zig
 
       - name: Run Tests
         run: zig build test --summary all
+        # This now works because we added test step in build.zig
 
-      - name: Build WASM
-        run: zig build wasm -Doptimize=ReleaseSmall --summary all
-
-      - name: List zig-out folder  # <-- ADD THIS TO DEBUG
+      - name: List zig-out folder
         run: ls -R zig-out
 
       - name: Upload WASM Artifact
         uses: actions/upload-artifact@v4
         with:
           name: basin-wasm
-          path: zig-out/**/basin.wasm  # <-- use glob to catch it anywhere
+          path: zig-out/bin/basin.wasm
