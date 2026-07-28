@@ -22,7 +22,6 @@ pub fn build(b: *std.Build) void {
     // Zig 0.14 WASM export fixes
     wasm.rdynamic = true; // keep all export fn
     wasm.root_module.strip = false; // don't strip exports
-    wasm.single_threaded = true;
 
     b.installArtifact(wasm);
 }
