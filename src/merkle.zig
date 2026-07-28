@@ -25,8 +25,8 @@ fn matmul(s: [T]Fr) [T]Fr {
     return out;
 }
 
-fn poseidonPerm(state: [T]Fr) [T]Fr {
-    var state = state;
+fn poseidonPerm(state_in: [T]Fr) [T]Fr {
+    var state = state_in;
     var round: usize = 0;
     const RF = consts.RF; const RP = consts.RP;
 
