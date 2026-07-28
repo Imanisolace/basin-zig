@@ -106,20 +106,24 @@ fn matmul(s: [T]Fr) [T]Fr {
     return out;
 }
 
-pub fn poseidon_perm(mut state: [T]Fr) [T]Fr {
+pub fn poseidon_perm(state: [T]Fr) [T]Fr {
+    var state = state; // make it mutable
     var round: usize = 0;
+
     // Full rounds
     while (round < RF / 2) : (round += 1) {
         for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         for (0..T) |i| state[i] = sbox(state[i]);
         state = matmul(state);
     }
+
     // Partial rounds
     while (round < RF / 2 + RP) : (round += 1) {
         for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         state[0] = sbox(state[0]);
         state = matmul(state);
     }
+
     // Full rounds
     while (round < ROUNDS) : (round += 1) {
         for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
