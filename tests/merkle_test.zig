@@ -25,12 +25,16 @@ test "Merkle Accumulator: Complete Lifecycle Verification" {
     try std.testing.expect(is_valid);
 
     // 5. Tamper validation test: modifying proof bytes must trigger failure
-    var bad_steps = try allocator.alloc(merkle.ProofStep, proof.steps.len);
-    defer allocator.free(bad_steps);
-    for (proof.steps, 0..) |s, i| bad_steps[i] = s;
-    bad_steps[0].sibling[0] ^= 0xFF; // corrupt
+    // Use separate arena so proof.deinit() doesn't free bad_proof's memory
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
 
-    const bad_proof = merkle.MerkleProof{.steps = bad_steps,.allocator = allocator };
+    var bad_steps = try arena_alloc.alloc(merkle.ProofStep, proof.steps.len);
+    for (proof.steps, 0..) |s, i| bad_steps[i] = s;
+    bad_steps[0].sibling[0] ^= 0xFF; // corrupt first byte of first sibling
+
+    const bad_proof = merkle.MerkleProof{.steps = bad_steps,.allocator = arena_alloc };
     const is_invalid = merkle.verifyProof(leaves[target_index], bad_proof, root);
     try std.testing.expect(!is_invalid);
 }
