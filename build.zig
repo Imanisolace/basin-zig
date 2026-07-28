@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
 
-    // ADD THIS: bigzig module
+    // bigzig module - for u256 BN254 math
     const bigzig_mod = b.addModule("bigzig",.{
        .root_source_file = b.path("vendor/bigzig/src/bigzig.zig"),
     });
@@ -18,13 +18,14 @@ pub fn build(b: *std.Build) void {
        .optimize = optimize,
     });
 
-    // Merkle module - depends on basin
+    // Merkle module - depends on basin + bigzig
     const merkle_mod = b.addModule("merkle",.{
        .root_source_file = b.path("src/merkle.zig"),
        .target = target,
        .optimize = optimize,
     });
     merkle_mod.addImport("basin", basin_mod);
+    merkle_mod.addImport("bigzig", bigzig_mod); // FIX: was missing
 
     // 1. Example Binary
     const exe = b.addExecutable(.{
@@ -34,7 +35,7 @@ pub fn build(b: *std.Build) void {
        .optimize = optimize,
     });
     exe.root_module.addImport("basin", basin_mod);
-    exe.root_module.addImport("bigzig", bigzig_mod); // ADD THIS
+    exe.root_module.addImport("bigzig", bigzig_mod);
     b.installArtifact(exe);
 
     // 2. WASM Binary
@@ -52,7 +53,7 @@ pub fn build(b: *std.Build) void {
     wasm.entry =.disabled;
     wasm.root_module.addImport("basin", basin_mod);
     wasm.root_module.addImport("merkle", merkle_mod);
-    wasm.root_module.addImport("bigzig", bigzig_mod); // ADD THIS
+    wasm.root_module.addImport("bigzig", bigzig_mod);
 
     const wasm_install = b.addInstallArtifact(wasm,.{
        .dest_dir =.{.override =.{.custom = "api" } },
@@ -69,7 +70,7 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("basin", basin_mod);
     tests.root_module.addImport("merkle", merkle_mod);
-    tests.root_module.addImport("bigzig", bigzig_mod); // ADD THIS
+    tests.root_module.addImport("bigzig", bigzig_mod);
 
     const test_options = b.addOptions();
     test_options.addOption(bool, "skip_heavy", skip_heavy);
