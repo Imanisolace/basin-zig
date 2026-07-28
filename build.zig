@@ -4,44 +4,17 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const skip_heavy = b.option(bool, "skip-heavy", "Skip CPU-intensive tests") orelse false;
-
-    // bigzig module - for u256 BN254 math
-    const bigzig_mod = b.addModule("bigzig",.{
-       .root_source_file = b.path("vendor/bigzig/src/bigzig.zig"),
-    });
-
-    // Core Basin module
     const basin_mod = b.addModule("basin",.{
        .root_source_file = b.path("src/basin.zig"),
-       .target = target,
-       .optimize = optimize,
     });
-
-    // Merkle module - depends on basin + bigzig
     const merkle_mod = b.addModule("merkle",.{
        .root_source_file = b.path("src/merkle.zig"),
-       .target = target,
-       .optimize = optimize,
     });
-    merkle_mod.addImport("basin", basin_mod);
-    merkle_mod.addImport("bigzig", bigzig_mod); // FIX: was missing
 
-    // 1. Example Binary
-    const exe = b.addExecutable(.{
-       .name = "basin-example",
-       .root_source_file = b.path("examples/main.zig"),
-       .target = target,
-       .optimize = optimize,
-    });
-    exe.root_module.addImport("basin", basin_mod);
-    exe.root_module.addImport("bigzig", bigzig_mod);
-    b.installArtifact(exe);
-
-    // 2. WASM Binary
+    // 1. WASM Target for worker.js / browser
     const wasm_target = b.resolveTargetQuery(.{
        .cpu_arch =.wasm32,
-       .os_tag =.freestanding,
+       .os_tag =.wasi,
     });
     const wasm = b.addExecutable(.{
        .name = "basin",
@@ -49,38 +22,29 @@ pub fn build(b: *std.Build) void {
        .target = wasm_target,
        .optimize =.ReleaseSmall,
     });
-    wasm.rdynamic = true;
-    wasm.entry =.disabled;
     wasm.root_module.addImport("basin", basin_mod);
     wasm.root_module.addImport("merkle", merkle_mod);
-    wasm.root_module.addImport("bigzig", bigzig_mod);
+    b.installArtifact(wasm);
 
-    const wasm_install = b.addInstallArtifact(wasm,.{
-       .dest_dir =.{.override =.{.custom = "api" } },
+    // 2. CLI Target for server.js to call
+    const cli = b.addExecutable(.{
+       .name = "basin-cli",
+       .root_source_file = b.path("src/cli.zig"),
+       .target = target,
+       .optimize =.ReleaseSafe,
     });
-    const wasm_step = b.step("wasm", "Build Wasm for API");
-    wasm_step.dependOn(&wasm_install.step);
+    cli.root_module.addImport("basin", basin_mod);
+    cli.root_module.addImport("merkle", merkle_mod);
+    b.installArtifact(cli);
 
-    // 3. Test Suite
+    // 3. Tests
+    const test_step = b.step("test", "Run tests");
     const tests = b.addTest(.{
-       .name = "basin-test",
        .root_source_file = b.path("tests/run.zig"),
        .target = target,
        .optimize = optimize,
     });
     tests.root_module.addImport("basin", basin_mod);
     tests.root_module.addImport("merkle", merkle_mod);
-    tests.root_module.addImport("bigzig", bigzig_mod);
-
-    const test_options = b.addOptions();
-    test_options.addOption(bool, "skip_heavy", skip_heavy);
-    tests.root_module.addImport("build_config", test_options.createModule());
-
-    b.installArtifact(tests);
-
-    const run_tests = b.addRunArtifact(tests);
-    b.step("test", "Run correctness tests").dependOn(&run_tests.step);
-
-    const run_exe = b.addRunArtifact(exe);
-    b.step("run", "Run the example").dependOn(&run_exe.step);
+    test_step.dependOn(&b.addRunArtifact(tests).step);
 }
