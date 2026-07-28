@@ -5,7 +5,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/basin.zig"),
     });
 
-    // WASM Target for worker.js
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
         .os_tag = .wasi,
@@ -19,10 +18,14 @@ pub fn build(b: *std.Build) void {
     });
     wasm.root_module.addImport("basin", basin_mod);
 
-    // Zig 0.14 WASM library fixes
-    wasm.rdynamic = true; // keep all export fn
-    wasm.root_module.strip = false; // don't strip exports
-    wasm.entry = .disabled; // CRITICAL: no _start needed. This is a library
+    wasm.rdynamic = true;
+    wasm.root_module.strip = false;
+    wasm.entry = .disabled;
 
-    b.installArtifact(wasm);
+    const install_wasm = b.addInstallArtifact(wasm, .{});
+    b.getInstallStep().dependOn(&install_wasm.step);
+
+    // CI fix: add a dummy test step so "zig build test" works
+    const test_step = b.step("test", "Build wasm for CI");
+    test_step.dependOn(b.getInstallStep());
 }
