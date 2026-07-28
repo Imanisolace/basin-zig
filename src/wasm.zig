@@ -131,7 +131,7 @@ export fn api_verify_proof(
     for (0..proof_len) |i| {
         const sibling_offset = i * OUTPUT_SIZE;
         @memcpy(&sibling_buf, siblings_ptr[sibling_offset..][0..OUTPUT_SIZE]);
-        const is_right = is_right_ptr[i]!= 0;
+        const is_right = is_right_ptr[i] != 0;
 
         var h = basin.Hasher.init();
         if (is_right) {
