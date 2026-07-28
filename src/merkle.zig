@@ -1,16 +1,11 @@
 const std = @import("std");
+const consts = @import("poseidon_consts.zig");
 
 pub const Leaf = [32]u8;
 pub const Hash = [32]u8;
 
-// Poseidon BN254, width=3, full=8, partial=22
-const C: [90]u64 =.{
-    0x5f4a5b7b9b3b4b5b, 0x1a2b3c4d5e6f7081, 0x9a8b7c6d5e4f3021,
-    //... truncated for chat. Use real constants from circomlib
-};
-const MDS: [3][3]u64 =.{
-   .{1, 1, 2},.{1, 2, 1},.{2, 1, 1},
-}; // simplified MDS for demo. Replace with real 3x3 BN254 MDS
+const C = consts.C;
+const MDS = consts.MDS;
 
 fn poseidonPerm(state: *[3]u64, round: usize) void {
     for (0..3) |i| state[i] +%= C[round * 3 + i];
