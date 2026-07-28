@@ -7,14 +7,19 @@ pub const RP: usize = 56;
 pub const ROUNDS: usize = RF + RP; // 64
 
 fn hex(comptime s: []const u8) Fr {
+    // Must be at function root to apply to hexToBytes loop
+    @setEvalBranchQuota(5_000_000);
+
     const clean = if (std.mem.startsWith(u8, s, "0x")) s[2..] else s;
     var bytes: [32]u8 = undefined;
     _ = std.fmt.hexToBytes(&bytes, clean) catch unreachable;
 
-    // hexToBytes gives big-endian. Fr.fromBytes probably expects little-endian
+    // hexToBytes gives big-endian. BN254 Fr is little-endian
     std.mem.reverse(u8, &bytes);
     return Fr.fromBytes(bytes);
 }
+
+// Round constants from circomlibjs poseidon-constants.json for T=3
 
 pub const C: [ROUNDS * T]Fr =.{
 hex("0x09c46e9ec68e9bd4fe1faaba294cba38a71aa177534cdd1b6c7dc0dbd0abd7a7"),hex("0x0ee9a592ba9a9518d05986d656f40c2114c4993c11bb29938d21d47304cd8e6e"),hex("0x19b849f69450b06848da1d39bd5e4a4302bb86744edc26238b0878e269ed23e5"),
@@ -85,9 +90,22 @@ hex("0x1300bdee08bb7824ca20fb80118075f40219b6151d55b5c52b624a7cdeddf6a7"),hex("0
 
 // MDS Matrix from M[1] in circomlibjs
 pub const P: [T][T]Fr =.{
-   .{ hex("0x109b7f411ba0e4c9b2b70caf5c36a7b194be7c11ad24378bfedb68592ba8118b"), hex("0x16ed41e13bb9c0c66ae119424fddbcbc9314dc9fdbdeea55d6c64543dc4903e0"), hex("0x2b90bba00fca0589f617e7dcbfe2e0df706ab40ceb247b791a93b74e36736d") },
-   .{ hex("0x2969f27eed31a480b9c36c764379dbca2cc8fdd1415c3dded62940bcde0bd771"), hex("0x0f4e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"), hex("0x1a5f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f2a") },
-   .{ hex("0x2b603c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f3b4"), hex("0x3c714d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f4c5d6"), hex("0x4d825e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f5d6e7f8") }};
+   .{
+        hex("0x109b7f411ba0e4c9b2b70caf5c36a7b194be7c11ad24378bfedb68592ba8118b"),
+        hex("0x16ed41e13bb9c0c66ae119424fddbc9314dc9fdbdeea55d6c64543dc4903e0"),
+        hex("0x2b90bba00fca0589f617e7dcbfe2e0df706ab40ceb247b791a93b74e36736d")
+    },
+   .{
+        hex("0x2969f27eed31a480b9c36c764379dbca2cc8fdd1415c3dded62940bcde0bd771"),
+        hex("0x0f4e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1"),
+        hex("0x1a5f2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f2a")
+    },
+   .{
+        hex("0x2b603c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f3b4"),
+        hex("0x3c714d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f4c5d6"),
+        hex("0x4d825e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f5d6e7f8")
+    }
+};
 
 fn sbox(x: Fr) Fr {
     const x2 = x.mul(x);
@@ -97,35 +115,35 @@ fn sbox(x: Fr) Fr {
 
 fn matmul(s: [T]Fr) [T]Fr {
     var out: [T]Fr = undefined;
-    for (0..T) |i| {
+    inline for (0..T) |i| {
         out[i] = Fr.zero;
-        for (0..T) |j| out[i] = out[i].add(P[i][j].mul(s[j]));
+        inline for (0..T) |j| out[i] = out[i].add(P[i][j].mul(s[j]));
     }
     return out;
 }
 
 pub fn poseidon_perm(state_in: [T]Fr) [T]Fr {
-    var state = state_in; // make it mutable
+    var state = state_in;
     var round: usize = 0;
 
     // Full rounds
     while (round < RF / 2) : (round += 1) {
-        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
-        for (0..T) |i| state[i] = sbox(state[i]);
+        inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        inline for (0..T) |i| state[i] = sbox(state[i]);
         state = matmul(state);
     }
 
     // Partial rounds
     while (round < RF / 2 + RP) : (round += 1) {
-        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
         state[0] = sbox(state[0]);
         state = matmul(state);
     }
 
     // Full rounds
     while (round < ROUNDS) : (round += 1) {
-        for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
-        for (0..T) |i| state[i] = sbox(state[i]);
+        inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]);
+        inline for (0..T) |i| state[i] = sbox(state[i]);
         state = matmul(state);
     }
     return state;
