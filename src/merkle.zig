@@ -10,7 +10,8 @@ const T = consts.T; const ROUNDS = consts.ROUNDS; const C = consts.C; const P = 
 fn sbox(x: Fr) Fr { const x2 = x.mul(x); const x4 = x2.mul(x2); return x4.mul(x); }
 fn matmul(s: [T]Fr) [T]Fr { var out: [T]Fr = undefined; inline for (0..T) |i| { out[i] = Fr.zero; inline for (0..T) |j| out[i] = out[i].add(P[i][j].mul(s[j])); } return out; }
 
-fn poseidonPerm(mut state: [T]Fr) [T]Fr {
+fn poseidonPerm(state_in: [T]Fr) [T]Fr { // FIXED: no mut
+    var state = state_in; // copy to mut
     var round: usize = 0; const RF = consts.RF; const RP = consts.RP;
     while (round < RF / 2) : (round += 1) { inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]); inline for (0..T) |i| state[i] = sbox(state[i]); state = matmul(state); }
     while (round < RF / 2 + RP) : (round += 1) { inline for (0..T) |i| state[i] = state[i].add(C[round*T + i]); state[0] = sbox(state[0]); state = matmul(state); }
