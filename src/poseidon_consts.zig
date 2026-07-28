@@ -1,4 +1,4 @@
-const std = @import("std");
+const  std = @import("std");
 const Fr = @import("fr.zig").Fr; // <- change this to wherever your Fr type is
 
 pub const T: usize = 3;
