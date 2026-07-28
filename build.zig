@@ -19,9 +19,10 @@ pub fn build(b: *std.Build) void {
     });
     wasm.root_module.addImport("basin", basin_mod);
 
-    // Zig 0.14 WASM export fixes
+    // Zig 0.14 WASM library fixes
     wasm.rdynamic = true; // keep all export fn
     wasm.root_module.strip = false; // don't strip exports
+    wasm.entry = .disabled; // CRITICAL: no _start needed. This is a library
 
     b.installArtifact(wasm);
 }
