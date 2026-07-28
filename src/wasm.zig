@@ -73,7 +73,7 @@ export fn api_generate_proof(count: usize, leaf_index: usize) u32 {
     var depth: usize = 0;
 
     while (current_len > 1) {
-        const is_odd = (target_idx % 2!= 0);
+        const is_odd = (target_idx % 2 != 0);
         const sibling_idx = if (is_odd) target_idx - 1 else target_idx + 1;
 
         if (sibling_idx < current_len) {
