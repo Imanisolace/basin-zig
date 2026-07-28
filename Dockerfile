@@ -1,22 +1,34 @@
-# 1. Use official Node 20 LTS - slim for size
-FROM node:20-slim
+# 1. STAGE 1: Build Zig
+FROM ghcr.io/ziglang/zig:0.14.0 AS zigbuild
+WORKDIR /app
+COPY src ./src
+COPY build.zig ./
+RUN zig build -Doptimize=ReleaseSafe
 
-# 2. Set working dir
+# 2. STAGE 2: Run Node
+FROM node:20-slim
 WORKDIR /app
 
-# 3. Install deps - NUKE OLD CACHE FIRST
+# Install deps
 COPY package*.json ./
 RUN rm -rf node_modules package-lock.json && npm cache clean --force && npm install --omit=dev
 
-# 4. Copy app code + pre-built wasm
-COPY . .
+# Copy app code
+COPY .
 
-# 5. Expose port
+# Copy compiled Zig artifacts from stage 1
+COPY --from=zigbuild /app/zig-out/bin/basin-cli /app/zig-out/bin/basin-cli
+COPY --from=zigbuild /app/zig-out/bin/basin.wasm /app/basin.wasm
+
+# Make CLI executable
+RUN chmod +x /app/zig-out/bin/basin-cli
+
+# Expose port
 EXPOSE 8080
 
-# 6. Healthcheck so Railway/Fly know it's alive
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "require('http').get('http://localhost:8080/health', (r) => {if (r.statusCode !== 200) throw new Error()})"
 
-# 7. Start
+# Start
 CMD ["node", "server.js"]
