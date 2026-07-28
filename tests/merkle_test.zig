@@ -17,15 +17,21 @@ test "Merkle Accumulator: Complete Lifecycle Verification" {
 
     // 3. Generate cryptographic proof path for the 3rd leaf ("0xCC")
     const target_index = 2;
-    const proof = try merkle.generateProof(allocator, &leaves, target_index);
+    var proof = try merkle.generateProof(allocator, &leaves, target_index);
+    defer proof.deinit(); // <- FIX 1: free the allocated steps
 
     // 4. Verify structural truth of the statement statelessly
     const is_valid = merkle.verifyProof(leaves[target_index], proof, root);
     try std.testing.expect(is_valid);
 
     // 5. Tamper validation test: modifying proof bytes must trigger failure
-    var bad_proof = proof;
-    bad_proof.steps[0].sibling[0] ^= 0xFF;
+    // Need a copy because we can't mutate proof.steps after defer
+    var bad_steps = try allocator.alloc(merkle.ProofStep, proof.steps.len);
+    defer allocator.free(bad_steps);
+    @memcpy(bad_steps, proof.steps);
+    bad_steps[0].sibling[0] ^= 0xFF;
+
+    var bad_proof = merkle.MerkleProof{.steps = bad_steps,.allocator = allocator };
     const is_invalid = merkle.verifyProof(leaves[target_index], bad_proof, root);
     try std.testing.expect(!is_invalid);
 }
