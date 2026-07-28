@@ -104,7 +104,7 @@ test "BENCH: speed" {
     std.debug.print("\nbasin: {d:.2} MB/s\n",.{mb_s});
 }
 
-// ========== NEW TESTS START HERE ==========
+// ========== NEW BN254 + MERKLE TESTS ==========
 
 test "FR: BN254 add matches solidity math" {
     const Fr = merkle.Fr;
@@ -117,10 +117,10 @@ test "FR: BN254 add matches solidity math" {
     try std.testing.expect(three.eq(expected));
 }
 
-test "FR: BN254 mul wraps at prime" {
+test "FR: BN254 add wraps at prime" {
     const Fr = merkle.Fr;
-    const P_minus_1 = Fr.fromBytes([_]u8{0}**31 ++ [_]u8{0xFE}); // P-1 approx, just test wrap
-    const two = Fr.fromBytes([_]u8{2} ++ [_]u8{0}**31);
+    const one = Fr.fromBytes([_]u8{1} ++ [_]u8{0}**31); // 1
+    const P_minus_1 = Fr.fromBytes([_]u8{0}**31 ++ [_]u8{0xFE}); // P-1 approx
 
     const result = P_minus_1.add(one); // should wrap to 0
     try std.testing.expect(result.eq(Fr.zero));
@@ -134,5 +134,7 @@ test "MERKLE: root with real Fr math" {
     defer allocator.free(root);
 
     try std.testing.expectEqual(@as(usize, 32), root.len);
-    std.debug.print("\nMerkle Root: {s}\n",.{try basin.toHex(root, allocator)});
+    const hex = try basin.toHex(root, allocator);
+    defer allocator.free(hex);
+    std.debug.print("\nMerkle Root: {s}\n",.{hex});
 }
