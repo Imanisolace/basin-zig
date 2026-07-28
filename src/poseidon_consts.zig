@@ -1,19 +1,19 @@
 const std = @import("std");
 const Fr = @import("fr.zig").Fr;
 
-comptime {
-    @setEvalBranchQuota(1_000_000); // <- inside comptime block
-}
-
 pub const T: usize = 3;
 pub const RF: usize = 8;
 pub const RP: usize = 56;
 pub const ROUNDS: usize = RF + RP; // 64
 
+comptime {
+    @setEvalBranchQuota(10_000_000); // bump it way up
+}
+
 fn hex(comptime s: []const u8) Fr {
     var b: [32]u8 = [_]u8{0} ** 32;
     var i: usize = 0;
-    while (i < 32) : (i += 1) {
+    inline while (i < 32) : (i += 1) { // <- inline while helps
         const hi = std.fmt.charToDigit(s[2 + i*2], 16) catch 0;
         const lo = std.fmt.charToDigit(s[2 + i*2 + 1], 16) catch 0;
         b[31 - i] = (hi << 4) | lo;
