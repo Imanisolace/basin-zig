@@ -120,7 +120,10 @@ test "FR: BN254 add matches solidity math" {
 test "FR: BN254 add wraps at prime" {
     const Fr = merkle.Fr;
     const one = Fr.fromBytes([_]u8{1} ++ [_]u8{0}**31); // 1
-    const P_minus_1 = Fr.fromBytes([_]u8{0}**31 ++ [_]u8{0xFE}); // P-1 approx
+
+    // P - 1 for BN254
+    const P_minus_1_val: u256 = 21888242871839275222246405745257275088548364400416034343698204186575808495616;
+    const P_minus_1 = Fr.fromBytes(std.mem.toBytes(std.mem.nativeToLittle(u256, P_minus_1_val)));
 
     const result = P_minus_1.add(one); // should wrap to 0
     try std.testing.expect(result.eq(Fr.zero));
