@@ -106,8 +106,8 @@ fn matmul(s: [T]Fr) [T]Fr {
     return out;
 }
 
-pub fn poseidon_perm(state: [T]Fr) [T]Fr {
-    var state = state; // make it mutable
+pub fn poseidon_perm(state_in: [T]Fr) [T]Fr {
+    var state = state_in; // make it mutable
     var round: usize = 0;
 
     // Full rounds
