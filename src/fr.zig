@@ -12,7 +12,7 @@ pub const Fr = struct {
     pub fn fromBytes(b: [32]u8) Fr {
         const x = std.mem.readInt(u256, &b,.little);
         var res = big.Int(u256).from(u256, x);
-        if (res.cmp(P)!=.lt) res = res.mod(P);
+        if (res.cmp(P) != .lt) res = res.mod(P);
         return Fr{.v = res };
     }
 
@@ -25,12 +25,12 @@ pub const Fr = struct {
 
     pub fn add(self: Fr, other: Fr) Fr {
         var sum = self.v.add(other.v);
-        if (sum.cmp(P)!=.lt) sum = sum.sub(P);
+        if (sum.cmp(P) != .lt) sum = sum.sub(P);
         return Fr{.v = sum };
     }
 
     pub fn sub(self: Fr, other: Fr) Fr {
-        if (self.v.cmp(other.v) ==.lt) {
+        if (self.v.cmp(other.v) == .lt) {
             const tmp = P.sub(other.v).add(self.v);
             return Fr{.v = tmp };
         } else {
@@ -44,6 +44,6 @@ pub const Fr = struct {
     }
 
     pub fn eq(self: Fr, other: Fr) bool {
-        return self.v.cmp(other.v) ==.eq;
+        return self.v.cmp(other.v) == .eq;
     }
 };
