@@ -1,7 +1,9 @@
 const std = @import("std");
 const Fr = @import("fr.zig").Fr;
 
-@setEvalBranchQuota(1_000_000); // <- must be top-level, not inside comptime block
+comptime {
+    @setEvalBranchQuota(1_000_000); // <- inside comptime block
+}
 
 pub const T: usize = 3;
 pub const RF: usize = 8;
