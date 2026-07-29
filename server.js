@@ -1,153 +1,124 @@
-import express from 'express'
-import path from 'path'
-import { Worker } from 'worker_threads'
-import { fileURLToPath } from 'url'
-import crypto from 'crypto'
-import Stripe from 'stripe'
+import express from 'express';
+import crypto from 'crypto';
+import Stripe from 'stripe';
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const app = express();
+app.use(express.json());
 
-const app = express()
-const PORT = process.env.PORT || 8080
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_123');
+const PORT = process.env.PORT || 3000;
 
-// STRIPE: put these in Railway ENV vars
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-const STRIPE_PRICE_BUILDER = process.env.STRIPE_PRICE_BUILDER // price_xxx
-const STRIPE_PRICE_SCALE = process.env.STRIPE_PRICE_SCALE // price_xxx
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+// In-memory DB for now
+const db = { users: new Map() };
 
-app.use(express.json({ limit: '10mb' }))
-app.use(express.static(__dirname))
-
-// ===== IN-MEMORY DB. REPLACE WITH POSTGRES LATER =====
-const db = {
-  // apiKey: { tier, usage, email, customerId }
-  "demo_key_free_123": { tier: "free", usage: { prove: 0, verify: 0 }, email: "demo@test.com", customerId: null }
-}
-
-const TIERS = {
-  free: { prove: 1000, verify: 5000, price: 0 },
-  builder: { prove: 50000, verify: 200000, price: 29 },
-  scale: { prove: 500000, verify: 2000000, price: 199 }
-}
-
-const PRICE_TO_TIER = {
-  [STRIPE_PRICE_BUILDER]: "builder",
-  [STRIPE_PRICE_SCALE]: "scale"
-}
-
-// ===== WORKERS =====
-const NUM_WORKERS = 2
-const workers = []
-const pending = new Map()
-for (let i = 0; i < NUM_WORKERS; i++) {
-  const worker = new Worker(path.join(__dirname, 'worker.js'))
-  worker.on('message', (msg) => {
-    const { id, result, error } = msg
-    const resolve = pending.get(id)
-    if (resolve) {
-      pending.delete(id)
-      clearTimeout(resolve.timeout)
-      resolve.cb({ result, error })
+// Simple Merkle Tree that won't crash
+class MerkleTree {
+  constructor(items) {
+    this.leaves = items.map(i => this.hash(i));
+    this.layers = [this.leaves];
+    this.buildTree();
+  }
+  
+  hash(data) {
+    return crypto.createHash('sha256').update(String(data)).digest('hex');
+  }
+  
+  buildTree() {
+    let layer = this.leaves;
+    while (layer.length > 1) {
+      const nextLayer = [];
+      for (let i = 0; i < layer.length; i += 2) {
+        const left = layer[i];
+        const right = layer[i + 1] || left; // duplicate if odd
+        nextLayer.push(this.hash(left + right));
+      }
+      this.layers.push(nextLayer);
+      layer = nextLayer;
     }
-  })
-  workers.push(worker)
-}
-let nextWorker = 0
-function callWorker(type, data) {
-  return new Promise((resolve) => {
-    const worker = workers[nextWorker]
-    nextWorker = (nextWorker + 1) % NUM_WORKERS
-    const id = Date.now().toString() + Math.random().toString(16).slice(2)
-    const timeout = setTimeout(() => { pending.delete(id); resolve({ error: "Timeout" }) }, 30000)
-    pending.set(id, { cb: resolve, timeout })
-    worker.postMessage({ id, type,...data })
-  })
-}
-
-// ===== MIDDLEWARE =====
-function authAndTrack(endpoint) {
-  return (req, res, next) => {
-    const apiKey = req.headers['x-api-key']
-    if (!apiKey ||!db[apiKey]) return res.status(401).json({ error: "Invalid x-api-key" })
-    const user = db[apiKey]
-    const tier = TIERS[user.tier]
-    if (user.usage[endpoint] >= tier[endpoint]) {
-      return res.status(429).json({ error: `Limit reached. Upgrade at /billing`, limit: tier[endpoint], used: user.usage[endpoint] })
+  }
+  
+  getRoot() { return this.layers[this.layers.length - 1][0] || ''; }
+  
+  getProof(index) {
+    const proof = [];
+    for (let i = 0; i < this.layers.length - 1; i++) {
+      const layer = this.layers[i];
+      const isRight = index % 2;
+      const pairIndex = isRight? index - 1 : index + 1;
+      if (layer[pairIndex]) proof.push(layer[pairIndex]);
+      index = Math.floor(index / 2);
     }
-    res.on('finish', () => { if (res.statusCode < 400) user.usage[endpoint] += 1 })
-    next()
+    return proof;
   }
 }
 
-// ===== ROUTES =====
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }))
-app.get('/', (req, res) => res.json({ name: 'Basin ZK API v2', status: 'live' }))
+function verifyProof(leaf, proof, root, index) {
+  let hash = crypto.createHash('sha256').update(String(leaf)).digest('hex');
+  for (const p of proof) {
+    if (index % 2 === 0) hash = crypto.createHash('sha256').update(hash + p).digest('hex');
+    else hash = crypto.createHash('sha256').update(p + hash).digest('hex');
+    index = Math.floor(index / 2);
+  }
+  return hash === root;
+}
 
-// 1. Create API Key
+// Middleware
+function auth(req, res, next) {
+  const key = req.headers['x-api-key'];
+  if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
+  const user = db.users.get(key);
+  if (!user) return res.status(401).json({ error: 'Invalid x-api-key' });
+  req.user = user;
+  next();
+}
+
+// Routes
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 app.post('/apikey', (req, res) => {
-  const { email } = req.body
-  const newKey = `zk_${crypto.randomBytes(16).toString('hex')}`
-  db[newKey] = { tier: "free", usage: { prove: 0, verify: 0 }, email, customerId: null }
-  res.json({ apiKey: newKey, tier: "free", limits: TIERS.free })
-})
+  const { email } = req.body;
+  const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
+  db.users.set(apiKey, { email, tier: 'free', usage: { prove: 0, verify: 0 } });
+  res.json({ apiKey, tier: 'free', limits: { prove: 1000, verify: 5000, price: 0 } });
+});
 
-// 2. Create Stripe Checkout
-app.post('/billing', async (req, res) => {
-  const { apiKey, priceId } = req.body
-  if (!db[apiKey]) return res.status(401).json({ error: "Invalid key" })
-
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `https://your-domain.com/usage`,
-    cancel_url: `https://your-domain.com/`,
-    client_reference_id: apiKey,
-    customer_email: db[apiKey].email
-  })
-  res.json({ url: session.url })
-})
-
-// 3. Stripe Webhook - upgrades tier
-app.post('/webhook', express.raw({type: 'application/json'}), async (req, res) => {
-  const sig = req.headers['stripe-signature']
-  let event
+app.post('/prove', auth, async (req, res) => {
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET)
-  } catch (err) { return res.status(400).send(`Webhook Error: ${err.message}`) }
-
-  if (event.type === 'checkout.session.completed') {
-    const apiKey = event.data.object.client_reference_id
-    const priceId = event.data.object.line_items?.data[0]?.price.id
-    if (db[apiKey] && PRICE_TO_TIER[priceId]) {
-      db[apiKey].tier = PRICE_TO_TIER[priceId]
-      db[apiKey].customerId = event.data.object.customer
-      db[apiKey].usage = { prove: 0, verify: 0 } // reset on upgrade
-    }
+    const { item } = req.body;
+    if (!item) return res.status(400).json({ error: 'item required' });
+    
+    // Demo dataset
+    const dataset = ['alice', 'bob', 'charlie', 'dave'];
+    const tree = new MerkleTree(dataset);
+    const index = dataset.indexOf(item);
+    if (index === -1) return res.status(404).json({ error: 'item not found' });
+    
+    const proof = tree.getProof(index);
+    const root = tree.getRoot();
+    
+    req.user.usage.prove++;
+    
+    res.json({ root, proof, target_index: index, valid: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
   }
-  res.json({ received: true })
-})
+});
 
-// 4. API Endpoints
-app.post('/prove', authAndTrack('prove'), async (req, res) => {
-  const { result, error } = await callWorker('prove', req.body)
-  if (error) res.status(500).json({ error })
-  else res.json({...result })
-})
+app.post('/verify', auth, async (req, res) => {
+  try {
+    const { root, item, target_index, proof } = req.body;
+    const valid = verifyProof(item, proof, root, target_index);
+    req.user.usage.verify++;
+    res.json({ valid });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
+});
 
-app.post('/verify', authAndTrack('verify'), async (req, res) => {
-  const { result, error } = await callWorker('verify', req.body)
-  if (error) res.status(500).json({ error })
-  else res.json({...result })
-})
+app.get('/usage', auth, (req, res) => {
+  res.json({ tier: req.user.tier, usage: req.user.usage });
+});
 
-// 5. Check usage
-app.get('/usage', (req, res) => {
-  const apiKey = req.headers['x-api-key']
-  if (!apiKey ||!db[apiKey]) return res.status(401).json({ error: "Invalid key" })
-  const user = db[apiKey]
-  res.json({ tier: user.tier, usage: user.usage, limits: TIERS[user.tier] })
-})
-
-app.listen(PORT, '0.0.0.0', () => console.log(`Basin ZK API v2 live on ${PORT}`))
+app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
