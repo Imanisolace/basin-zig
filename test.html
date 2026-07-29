@@ -1,21 +1,101 @@
 <!DOCTYPE html>
 <html>
-<head><title>Basin Test</title></head>
+<head>
+  <title>Basin Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #111; color: #eee; }
+    button { padding: 12px 20px; margin: 8px 4px; font-size: 16px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; }
+    input { padding: 10px; width: 90%; margin: 8px 0; background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; }
+    pre { background: #000; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; }
+    .ok { color: #4ade80; } .err { color: #f87171; }
+  </style>
+</head>
 <body>
-<h2>Test Basin API</h2>
-<button onclick="testProve()">Send Prove Request</button>
-<pre id="out"></pre>
+  <h2>Basin ZK API Tester</h2>
+
+  <h3>1. Get API Key</h3>
+  <input id="email" value="test@test.com" placeholder="your email">
+  <button onclick="getKey()">Get Free Key</button>
+  <p>Key: <code id="apikey">not created yet</code></p>
+
+  <h3>2. Test Prove</h3>
+  <input id="item" value="alice" placeholder="item to prove">
+  <button onclick="testProve()">Send Prove Request</button>
+
+  <h3>3. Test Verify</h3>
+  <button onclick="testVerify()" disabled id="verifyBtn">Send Verify Request</button>
+
+  <h3>4. Check Usage</h3>
+  <button onclick="checkUsage()">Check Usage</button>
+
+  <h3>Result:</h3>
+  <pre id="out">Click "Get Free Key" first</pre>
+
 <script>
-async function testProve() {
-  const res = await fetch('https://basin-zig-production.up.railway.app/v1/prove', {
+const API_URL = "https://basin-zig-production.up.railway.app" // your railway url
+let API_KEY = ""
+let LAST_DATA = null
+
+const out = document.getElementById('out')
+
+async function getKey() {
+  out.innerText = "Creating key..."
+  const res = await fetch(API_URL + '/apikey', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ email: document.getElementById('email').value })
+  });
+  const data = await res.json();
+  API_KEY = data.apiKey;
+  document.getElementById('apikey').innerText = API_KEY;
+  out.innerHTML = `<span class="ok">Key Created!</span>\n` + JSON.stringify(data, null, 2);
+}
+
+async function testProve() {
+  if(!API_KEY) return alert("Get API Key first!");
+  out.innerText = "Proving...";
+  const res = await fetch(API_URL + '/prove', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY
+    },
+    body: JSON.stringify({ item: document.getElementById('item').value })
+  });
+  const data = await res.json();
+  LAST_DATA = data;
+  document.getElementById('verifyBtn').disabled = false;
+  out.innerHTML = `<span class="ok">Proof Generated!</span>\n` + JSON.stringify(data, null, 2);
+}
+
+async function testVerify() {
+  if(!LAST_DATA) return alert("Run Prove first!");
+  out.innerText = "Verifying...";
+  const res = await fetch(API_URL + '/verify', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': API_KEY
+    },
     body: JSON.stringify({
-      challenge: "hello-from-phone",
-      publicKey: "test-key"
+      root: LAST_DATA.root,
+      item: document.getElementById('item').value,
+      target_index: LAST_DATA.target_index,
+      proof: LAST_DATA.proof
     })
   });
-  document.getElementById('out').textContent = await res.text();
+  const data = await res.json();
+  out.innerHTML = `<span class="ok">Verify Result:</span>\n` + JSON.stringify(data, null, 2);
+}
+
+async function checkUsage() {
+  if(!API_KEY) return alert("Get API Key first!");
+  const res = await fetch(API_URL + '/usage', {
+    headers: { 'x-api-key': API_KEY }
+  });
+  const data = await res.json();
+  out.innerText = JSON.stringify(data, null, 2);
 }
 </script>
 </body>
