@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import Stripe from 'stripe';
-import db from './db.js'; // <-- we added this
+import db from './db.js';
 
 const app = express();
 app.use(express.json());
@@ -9,9 +9,6 @@ app.use(express.json());
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_123');
 const PORT = process.env.PORT || 3000;
 
-// REMOVED: const db = { users: new Map() };
-
-// Simple Merkle Tree that won't crash
 class MerkleTree {
   constructor(items) {
     this.leaves = items.map(i => this.hash(i));
@@ -58,26 +55,25 @@ function verifyProof(leaf, proof, root, index) {
   return hash === root;
 }
 
-// Middleware - now checks Postgres
+// Middleware - now checks api_keys table
 async function auth(req, res, next) {
   const key = req.headers['x-api-key'];
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
-  
-  const result = await db.query('SELECT * FROM users WHERE api_key = $1', [key]);
+
+  const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]); // CHANGED
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid x-api-key' });
-  
+
   req.user = result.rows[0];
   next();
 }
 
-// Routes
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/apikey', async (req, res) => {
   const { email } = req.body;
   const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-  
-  await db.query(`CREATE TABLE IF NOT EXISTS users (
+
+  await db.query(`CREATE TABLE IF NOT EXISTS api_keys ( // CHANGED
     id SERIAL PRIMARY KEY,
     email TEXT,
     api_key TEXT UNIQUE,
@@ -85,9 +81,9 @@ app.post('/apikey', async (req, res) => {
     prove_usage INT DEFAULT 0,
     verify_usage INT DEFAULT 0
   )`);
-  
-  await db.query('INSERT INTO users(email, api_key) VALUES($1, $2)', [email, apiKey]);
-  
+
+  await db.query('INSERT INTO api_keys(email, api_key) VALUES($1, $2)', [email, apiKey]); // CHANGED
+
   res.json({ apiKey, tier: 'free', limits: { prove: 1000, verify: 5000, price: 0 } });
 });
 
@@ -104,7 +100,7 @@ app.post('/prove', auth, async (req, res) => {
     const proof = tree.getProof(index);
     const root = tree.getRoot();
 
-    await db.query('UPDATE users SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]);
+    await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]); // CHANGED
 
     res.json({ root, proof, target_index: index, valid: true });
   } catch (e) {
@@ -117,7 +113,7 @@ app.post('/verify', auth, async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
-    await db.query('UPDATE users SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]);
+    await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]); // CHANGED
     res.json({ valid });
   } catch (e) {
     console.error(e);
