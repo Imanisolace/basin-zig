@@ -42,15 +42,19 @@ if (parentPort) {
 
       let result;
       if (type === 'prove') {
+        // 1. Load all items into WASM memory, padded to 32 bytes
         for (let i = 0; i < items.length; i++) {
           const bytes = stringToBytes(items[i]);
           for (let b = 0; b < OUTPUT_SIZE; b++) {
             set_leaf_byte(i, b, bytes[b]);
           }
         }
+        // 2. Compute root
         if (api_compute_root(items.length) === 0) throw new Error("api_compute_root failed");
+        // 3. Generate proof
         if (api_generate_proof(items.length, target_index) === 0) throw new Error("api_generate_proof failed");
 
+        // 4. Read result from WASM memory
         const buf = new Uint8Array(memory.buffer);
         const rootHash = Buffer.from(buf.slice(get_root_ptr(), get_root_ptr() + OUTPUT_SIZE)).toString('hex');
         const steps = [];
@@ -61,28 +65,41 @@ if (parentPort) {
           });
         }
         result = { root: "0x" + rootHash, proof: { steps } };
-      } 
+      }
+
       else if (type === 'verify') {
-        // /verify now actually calls your Zig WASM
-        const leafBytes = stringToBytes(item); // note: 'item' not 'leaf'
-        const rootBytes = Buffer.from(root.replace('0x',''), 'hex');
-
-        const siblingsBuf = new Uint8Array(proof.steps.length * OUTPUT_SIZE);
-        const flagsBuf = new Uint8Array(proof.steps.length);
-        proof.steps.forEach((s, i) => {
-          Buffer.from(s.sibling.replace('0x',''), 'hex').copy(siblingsBuf, i * OUTPUT_SIZE);
-          flagsBuf[i] = s.is_right? 1 : 0;
-        });
-
         const mem = new Uint8Array(memory.buffer);
-        const base = 65536; // safe offset
-        mem.set(leafBytes, base);
-        mem.set(rootBytes, base + OUTPUT_SIZE);
-        mem.set(siblingsBuf, base + OUTPUT_SIZE * 2);
-        mem.set(flagsBuf, base + OUTPUT_SIZE * 3);
+        const base = 65536; // safe offset in WASM memory
 
-        const verified = api_verify_proof(base, base + OUTPUT_SIZE, proof.steps.length, base + OUTPUT_SIZE * 2, base + OUTPUT_SIZE * 3);
-        result = { valid: verified === 1 }; // changed to 'valid' to match API spec
+        // 1. Clear the memory region first
+        for(let i=0; i<OUTPUT_SIZE*4; i++) mem[base+i] = 0;
+
+        // 2. Write leaf, padded to 32 bytes
+        const leafBytes = stringToBytes(item);
+        for(let b=0; b<OUTPUT_SIZE; b++) mem[base+b] = leafBytes[b];
+
+        // 3. Write root
+        const rootBytes = Buffer.from(root.replace('0x',''), 'hex');
+        mem.set(rootBytes, base + OUTPUT_SIZE);
+
+        // 4. Write siblings and flags
+        for(let i=0; i<proof.steps.length; i++) {
+          const siblingBytes = Buffer.from(proof.steps[i].sibling.replace('0x',''), 'hex');
+          for(let b=0; b<OUTPUT_SIZE; b++) {
+            mem[base + OUTPUT_SIZE*2 + i*OUTPUT_SIZE + b] = siblingBytes[b];
+          }
+          mem[base + OUTPUT_SIZE*3 + i] = proof.steps[i].is_right? 1 : 0;
+        }
+
+        // 5. Call Zig verify
+        const verified = api_verify_proof(
+          base, // leaf_ptr
+          base + OUTPUT_SIZE, // root_ptr
+          proof.steps.length, // proof_len
+          base + OUTPUT_SIZE * 2, // siblings_ptr
+          base + OUTPUT_SIZE * 3 // flags_ptr
+        );
+        result = { valid: verified === 1 };
       }
       parentPort.postMessage({ id, result });
     } catch (err) {
