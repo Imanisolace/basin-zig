@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
+import rateLimit from 'express-rate-limit';
 import db from './db.js';
 
 const app = express();
@@ -52,12 +53,20 @@ function verifyProof(leaf, proof, root, index) {
   return hash === root;
 }
 
-// Usage limits per tier
+// Usage limits per month
 const LIMITS = {
   free: { prove: 1000, verify: 5000 },
   pro: { prove: 50000, verify: 200000 },
   team: { prove: 500000, verify: 2000000 },
   unlimited: { prove: Infinity, verify: Infinity }
+};
+
+// Rate limits per minute
+const RATE_LIMITS = {
+  free: { windowMs: 60 * 1000, max: 10 },
+  pro: { windowMs: 60 * 1000, max: 100 },
+  team: { windowMs: 60 * 1000, max: 1000 },
+  unlimited: { windowMs: 60 * 1000, max: 10000 }
 };
 
 // Middleware - checks api_keys table
@@ -72,27 +81,41 @@ async function auth(req, res, next) {
   next();
 }
 
-// Check usage limits
+// Dynamic rate limiter per tier + per api_key
+const dynamicRateLimit = async (req, res, next) => {
+  const tier = req.user.tier || 'free';
+  const limits = RATE_LIMITS[tier];
+
+  return rateLimit({
+    windowMs: limits.windowMs,
+    max: limits.max,
+    keyGenerator: () => req.user.api_key, // limit per API key
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: `Rate limit exceeded for ${tier} tier. ${limits.max} req/min` }
+  })(req, res, next);
+};
+
+// Check monthly usage limits
 async function checkLimit(req, res, next, type) {
   const tier = req.user.tier || 'free';
   const limit = LIMITS[tier][type];
   const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
 
   if (used >= limit) {
-    return res.status(429).json({ error: `Limit reached for ${tier} tier. Upgrade at /pricing` });
+    return res.status(429).json({ error: `Monthly limit reached for ${tier} tier. Upgrade at /pricing` });
   }
   next();
 }
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// Create API Key - now also accepts user_id from frontend
+// Create API Key
 app.post('/apikey', async (req, res) => {
   try {
     const { email, user_id } = req.body;
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
 
-    // Create table if it doesn't exist
     await db.query(`CREATE TABLE IF NOT EXISTS api_keys (
       id SERIAL PRIMARY KEY,
       user_id TEXT,
@@ -115,7 +138,7 @@ app.post('/apikey', async (req, res) => {
   }
 });
 
-app.post('/prove', auth, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
+app.post('/prove', auth, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
   try {
     const { item } = req.body;
     if (!item) return res.status(400).json({ error: 'item required' });
@@ -137,7 +160,7 @@ app.post('/prove', auth, async (req, res, next) => checkLimit(req, res, next, 'p
   }
 });
 
-app.post('/verify', auth, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
+app.post('/verify', auth, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
@@ -155,6 +178,7 @@ app.get('/usage', auth, (req, res) => {
     tier: tier,
     billing: req.user.billing,
     limits: LIMITS[tier],
+    rate_limit: RATE_LIMITS[tier],
     usage: { prove: req.user.prove_usage, verify: req.user.verify_usage }
   });
 });
