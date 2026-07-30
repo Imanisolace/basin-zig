@@ -55,12 +55,12 @@ function verifyProof(leaf, proof, root, index) {
   return hash === root;
 }
 
-// Middleware - now checks api_keys table
+// Middleware - checks api_keys table
 async function auth(req, res, next) {
   const key = req.headers['x-api-key'];
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
 
-  const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]); // CHANGED
+  const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]);
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid x-api-key' });
 
   req.user = result.rows[0];
@@ -70,21 +70,28 @@ async function auth(req, res, next) {
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/apikey', async (req, res) => {
-  const { email } = req.body;
-  const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
+  try {
+    const { email } = req.body;
+    const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
 
-  await db.query(`CREATE TABLE IF NOT EXISTS api_keys ( // CHANGED
-    id SERIAL PRIMARY KEY,
-    email TEXT,
-    api_key TEXT UNIQUE,
-    tier TEXT DEFAULT 'free',
-    prove_usage INT DEFAULT 0,
-    verify_usage INT DEFAULT 0
-  )`);
+    // Create table if it doesn't exist - NO COMMENTS INSIDE SQL
+    await db.query(`CREATE TABLE IF NOT EXISTS api_keys (
+      id SERIAL PRIMARY KEY,
+      email TEXT,
+      api_key TEXT UNIQUE,
+      tier TEXT DEFAULT 'free',
+      prove_usage INT DEFAULT 0,
+      verify_usage INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
 
-  await db.query('INSERT INTO api_keys(email, api_key) VALUES($1, $2)', [email, apiKey]); // CHANGED
+    await db.query('INSERT INTO api_keys(email, api_key) VALUES($1, $2)', [email, apiKey]);
 
-  res.json({ apiKey, tier: 'free', limits: { prove: 1000, verify: 5000, price: 0 } });
+    res.json({ apiKey, tier: 'free', limits: { prove: 1000, verify: 5000, price: 0 } });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/prove', auth, async (req, res) => {
@@ -100,7 +107,7 @@ app.post('/prove', auth, async (req, res) => {
     const proof = tree.getProof(index);
     const root = tree.getRoot();
 
-    await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]); // CHANGED
+    await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]);
 
     res.json({ root, proof, target_index: index, valid: true });
   } catch (e) {
@@ -113,7 +120,7 @@ app.post('/verify', auth, async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
-    await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]); // CHANGED
+    await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]);
     res.json({ valid });
   } catch (e) {
     console.error(e);
