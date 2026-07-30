@@ -1,168 +1,120 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Basin ZK API Tester</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: sans-serif; padding: 20px; background: #111; color: #eee; }
-    button { padding: 12px 20px; margin: 8px 4px; font-size: 16px; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer; }
-    button:hover { opacity: 0.9; }
-    button.upgrade { background: #10b981; }
-    input { padding: 10px; width: 90%; max-width: 400px; margin: 8px 0; background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; }
-    pre { background: #000; padding: 15px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; }
-    .ok { color: #4ade80; } .err { color: #f87171; }
-    .pricing { border-top: 1px solid #333; margin-top: 20px; padding-top: 20px; }
-    .tier-badge { background: #222; padding: 4px 10px; border-radius: 6px; }
-  </style>
+  <title>Basin ZK API - Test</title>
   <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+    button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; }
+    .pricing { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
+    .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; flex: 1; min-width: 200px; }
+    #output { background: #f5f5f5; padding: 15px; margin-top: 20px; white-space: pre-wrap; border-radius: 6px; }
+    input { padding: 8px; margin: 5px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+  </style>
 </head>
 <body>
-  <h2>Basin ZK API Tester</h2>
+  <h1>Basin ZK API Test</h1>
 
-  <h3>1. Get API Key</h3>
-  <input id="email" value="test@test.com" placeholder="your email">
-  <input id="userid" value="user_123" placeholder="your user id from DB">
+  <h2>1. Set User ID + Get API Key</h2>
+  <input id="userId" placeholder="user_id e.g. user_123" />
+  <input id="email" placeholder="email" />
   <button onclick="getKey()">Get Free Key</button>
-  <p>Key: <code id="apikey">not created yet</code></p>
-  <p>Plan: <span class="tier-badge" id="usertier">free</span> <span class="tier-badge" id="userbilling">-</span></p>
 
-  <h3>2. Test Prove</h3>
-  <input id="item" value="alice" placeholder="item to prove">
-  <button onclick="testProve()">Send Prove Request</button>
-
-  <h3>3. Test Verify</h3>
-  <button onclick="testVerify()" disabled id="verifyBtn">Send Verify Request</button>
-
-  <h3>4. Check Usage</h3>
-  <button onclick="checkUsage()">Check Usage</button>
-
+  <h2>2. Upgrade</h2>
   <div class="pricing">
-    <h3>5. Upgrade Plan</h3>
-    <button class="upgrade" onclick="checkout('pri_01kys708vdfs6wfchamrmvvv4p', 'pro', 'monthly')">Pro Monthly $79</button>
-    <button class="upgrade" onclick="checkout('pri_01kys74gy5hf3jtva5rx5a8cq8', 'pro', 'annually')">Pro Annual $790</button>
-    <br>
-    <button class="upgrade" onclick="checkout('pri_01kys7jtht7krtqzcnssrm1e77', 'team', 'monthly')">Team Monthly $149</button>
-    <button class="upgrade" onclick="checkout('pri_01kys7n660nytwbctwfscfrk6d', 'team', 'annually')">Team Annual $1490</button>
-    <br>
-    <button class="upgrade" onclick="checkout('pri_01kysh67sepm5cwf4j7nm1cwb3', 'unlimited', 'monthly')">Unlimited Monthly $799</button>
-    <button class="upgrade" onclick="checkout('pri_01kyshnknky8d6zqkgrrbz04hj', 'unlimited', 'annually')">Unlimited Annual $7990</button>
+    <div class="card">
+      <h3>Pro</h3>
+      <p>$79/mo or $790/yr</p>
+      <button onclick="checkout('pro', 'monthly')">Pro Monthly</button>
+      <button onclick="checkout('pro', 'annually')">Pro Annual</button>
+    </div>
+    <div class="card">
+      <h3>Team</h3>
+      <p>$799/mo or $7990/yr</p>
+      <button onclick="checkout('team', 'monthly')">Team Monthly</button>
+      <button onclick="checkout('team', 'annually')">Team Annual</button>
+    </div>
+    <div class="card">
+      <h3>Unlimited</h3>
+      <p>$1999/mo or $19990/yr</p>
+      <button onclick="checkout('unlimited', 'monthly')">Unlimited Monthly</button>
+      <button onclick="checkout('unlimited', 'annually')">Unlimited Annual</button>
+    </div>
   </div>
 
-  <h3>Result:</h3>
-  <pre id="out">Click "Get Free Key" first</pre>
+  <h2>3. Test API</h2>
+  <input id="apiKey" placeholder="Your zk_... key" />
+  <button onclick="checkUsage()">Check Usage</button>
+  <button onclick="prove()">Test /prove</button>
 
-<script>
-const API_URL = "https://basin-zig-production.up.railway.app" // your railway url
-const PADDLE_CLIENT_TOKEN = "PASTE_YOUR_CLIENT_SIDE_TOKEN_HERE" // from Paddle Dashboard > Developer Tools
+  <div id="output"></div>
 
-let API_KEY = ""
-let LAST_DATA = null
-let CURRENT_USER_ID = ""
-
-const out = document.getElementById('out')
-
-// Init Paddle
-Paddle.Initialize({ token: PADDLE_CLIENT_TOKEN });
-
-async function getKey() {
-  CURRENT_USER_ID = document.getElementById('userid').value;
-  if(!CURRENT_USER_ID) return alert("Enter user_id first!");
-  out.innerText = "Creating key..."
-  try {
-    const res = await fetch(API_URL + '/apikey', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ 
-        email: document.getElementById('email').value,
-        user_id: CURRENT_USER_ID // link key to user for webhook upgrades
-      })
-    });
-    const data = await res.json();
-    API_KEY = data.apiKey;
-    document.getElementById('apikey').innerText = API_KEY;
-    document.getElementById('usertier').innerText = data.tier || 'free';
-    document.getElementById('userbilling').innerText = data.billing || '-';
-    out.innerHTML = `<span class="ok">Key Created!</span>\n` + JSON.stringify(data, null, 2);
-  } catch(e) {
-    out.innerHTML = `<span class="err">Error: ${e.message}</span>`
-  }
-}
-
-async function checkout(priceId, tier, billing) {
-  if(!CURRENT_USER_ID) return alert("Get API Key first to set user_id!");
-  
-  Paddle.Checkout.open({
-    items: [{ priceId: priceId, quantity: 1 }],
-    customer: { email: document.getElementById('email').value },
-    customData: { 
-      user_id: CURRENT_USER_ID, // CRITICAL: so webhook knows who to upgrade
-      tier: tier, 
-      billing: billing // monthly or annually
-    }
-  });
-}
-
-async function testProve() {
-  if(!API_KEY) return alert("Get API Key first!");
-  out.innerText = "Proving...";
-  try {
-    const res = await fetch(API_URL + '/prove', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY
-      },
-      body: JSON.stringify({ item: document.getElementById('item').value })
-    });
-    const data = await res.json();
-    LAST_DATA = data;
-    document.getElementById('verifyBtn').disabled = false;
-    out.innerHTML = `<span class="ok">Proof Generated!</span>\n` + JSON.stringify(data, null, 2);
-  } catch(e) {
-    out.innerHTML = `<span class="err">Error: ${e.message}</span>`
-  }
-}
-
-async function testVerify() {
-  if(!LAST_DATA) return alert("Run Prove first!");
-  out.innerText = "Verifying...";
-  try {
-    const res = await fetch(API_URL + '/verify', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY
-      },
-      body: JSON.stringify({
-        root: LAST_DATA.root,
-        item: document.getElementById('item').value,
-        target_index: LAST_DATA.target_index,
-        proof: LAST_DATA.proof
-      })
-    });
-    const data = await res.json();
-    out.innerHTML = `<span class="ok">Verify Result:</span>\n` + JSON.stringify(data, null, 2);
-  } catch(e) {
-    out.innerHTML = `<span class="err">Error: ${e.message}</span>`
-  }
-}
-
-async function checkUsage() {
-  if(!API_KEY) return alert("Get API Key first!");
-  try {
-    const res = await fetch(API_URL + '/usage', {
-      headers: { 'x-api-key': API_KEY }
-    });
-    const data = await res.json();
-    out.innerText = JSON.stringify(data, null, 2);
+  <script>
+    const API_URL = 'https://basin-zig-production.up.railway.app';
     
-    // Refresh tier display
-    if(data.tier) document.getElementById('usertier').innerText = data.tier;
-    if(data.billing) document.getElementById('userbilling').innerText = data.billing;
-  } catch(e) {
-    out.innerHTML = `<span class="err">Error: ${e.message}</span>`
-  }
-}
-</script>
+    // PADDLE INIT - LIVE TOKEN
+    Paddle.Setup({ token: "live_aef2e1f18df4a39623469178690" });
+
+    // YOUR REAL PADDLE PRICE IDS
+    const PRICES = {
+      pro: { 
+        monthly: 'pri_01kys708vdfs6wfchamrmvvv4p',   
+        annually: 'pri_01kys74gy5hf3jtva5rx5a8cq8'    
+      },
+      team: { 
+        monthly: 'pri_01kys7jtht7krtqzcnssrm1e77',   
+        annually: 'pri_01kys7n660nytwbctwfscfrk6d'   
+      },
+      unlimited: { 
+        monthly: 'pri_01kysh67sepm5cwf4j7nm1cwb3',   
+        annually: 'pri_01kyshnknky8d6zqkgrrbz04hj'   
+      }
+    };
+
+    function log(data) {
+      document.getElementById('output').innerText = JSON.stringify(data, null, 2);
+    }
+
+    async function getKey() {
+      const email = document.getElementById('email').value;
+      const user_id = document.getElementById('userId').value;
+      if (!email || !user_id) return alert('Enter email + user_id');
+      
+      const res = await fetch(`${API_URL}/apikey`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email, user_id })
+      });
+      const data = await res.json();
+      document.getElementById('apiKey').value = data.apiKey;
+      log(data);
+    }
+
+    function checkout(tier, billing) {
+      const user_id = document.getElementById('userId').value;
+      if (!user_id) return alert('Set user_id first');
+      
+      Paddle.Checkout.open({
+        items: [{ priceId: PRICES[tier][billing], quantity: 1 }],
+        customData: { user_id: user_id, tier: tier, billing: billing }
+      });
+    }
+
+    async function checkUsage() {
+      const key = document.getElementById('apiKey').value;
+      const res = await fetch(`${API_URL}/usage`, { headers: { 'x-api-key': key } });
+      log(await res.json());
+    }
+
+    async function prove() {
+      const key = document.getElementById('apiKey').value;
+      const res = await fetch(`${API_URL}/prove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        body: JSON.stringify({ item: 'alice' })
+      });
+      log(await res.json());
+    }
+  </script>
 </body>
 </html>
