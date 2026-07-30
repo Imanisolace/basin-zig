@@ -1,12 +1,9 @@
 import express from 'express';
 import crypto from 'crypto';
-import Stripe from 'stripe';
 import db from './db.js';
 
 const app = express();
-app.use(express.json());
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_123');
+app.use(express.json()); // for normal routes
 const PORT = process.env.PORT || 3000;
 
 class MerkleTree {
@@ -55,6 +52,14 @@ function verifyProof(leaf, proof, root, index) {
   return hash === root;
 }
 
+// Usage limits per tier
+const LIMITS = {
+  free: { prove: 1000, verify: 5000 },
+  pro: { prove: 50000, verify: 200000 },
+  team: { prove: 500000, verify: 2000000 },
+  unlimited: { prove: Infinity, verify: Infinity }
+};
+
 // Middleware - checks api_keys table
 async function auth(req, res, next) {
   const key = req.headers['x-api-key'];
@@ -67,34 +72,50 @@ async function auth(req, res, next) {
   next();
 }
 
+// Check usage limits
+async function checkLimit(req, res, next, type) {
+  const tier = req.user.tier || 'free';
+  const limit = LIMITS[tier][type];
+  const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
+
+  if (used >= limit) {
+    return res.status(429).json({ error: `Limit reached for ${tier} tier. Upgrade at /pricing` });
+  }
+  next();
+}
+
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// Create API Key - now also accepts user_id from frontend
 app.post('/apikey', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, user_id } = req.body;
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
 
-    // Create table if it doesn't exist - NO COMMENTS INSIDE SQL
+    // Create table if it doesn't exist
     await db.query(`CREATE TABLE IF NOT EXISTS api_keys (
       id SERIAL PRIMARY KEY,
+      user_id TEXT,
       email TEXT,
       api_key TEXT UNIQUE,
       tier TEXT DEFAULT 'free',
+      billing TEXT DEFAULT NULL,
+      paddle_subscription_id TEXT DEFAULT NULL,
       prove_usage INT DEFAULT 0,
       verify_usage INT DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW()
     )`);
 
-    await db.query('INSERT INTO api_keys(email, api_key) VALUES($1, $2)', [email, apiKey]);
+    await db.query('INSERT INTO api_keys(email, api_key, user_id) VALUES($1, $2, $3)', [email, apiKey, user_id]);
 
-    res.json({ apiKey, tier: 'free', limits: { prove: 1000, verify: 5000, price: 0 } });
+    res.json({ apiKey, tier: 'free', billing: null, limits: LIMITS.free });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/prove', auth, async (req, res) => {
+app.post('/prove', auth, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
   try {
     const { item } = req.body;
     if (!item) return res.status(400).json({ error: 'item required' });
@@ -116,7 +137,7 @@ app.post('/prove', auth, async (req, res) => {
   }
 });
 
-app.post('/verify', auth, async (req, res) => {
+app.post('/verify', auth, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
@@ -129,10 +150,45 @@ app.post('/verify', auth, async (req, res) => {
 });
 
 app.get('/usage', auth, (req, res) => {
-  res.json({ 
-    tier: req.user.tier, 
-    usage: { prove: req.user.prove_usage, verify: req.user.verify_usage } 
+  const tier = req.user.tier || 'free';
+  res.json({
+    tier: tier,
+    billing: req.user.billing,
+    limits: LIMITS[tier],
+    usage: { prove: req.user.prove_usage, verify: req.user.verify_usage }
   });
+});
+
+// PADDLE WEBHOOK - handles upgrades and cancels
+app.post('/webhooks/paddle', express.raw({type: 'application/json'}), async (req, res) => {
+  try {
+    const event = JSON.parse(req.body.toString());
+
+    if (event.event_type === 'transaction.completed') {
+      const { custom_data, subscription_id, status } = event.data;
+      if (status === 'completed') {
+        await db.query(
+          `UPDATE api_keys SET tier=$1, billing=$2, paddle_subscription_id=$3 WHERE user_id=$4`,
+          [custom_data.tier, custom_data.billing, subscription_id, custom_data.user_id]
+        );
+        console.log(`Upgraded ${custom_data.user_id} to ${custom_data.tier} ${custom_data.billing}`);
+      }
+    }
+
+    if (event.event_type === 'subscription.cancelled') {
+      const subscriptionId = event.data.id;
+      await db.query(
+        `UPDATE api_keys SET tier='free', billing=NULL, paddle_subscription_id=NULL WHERE paddle_subscription_id=$1`,
+        [subscriptionId]
+      );
+      console.log(`Downgraded subscription ${subscriptionId} to free`);
+    }
+
+    res.sendStatus(200);
+  } catch (e) {
+    console.error('Webhook error:', e);
+    res.sendStatus(400);
+  }
 });
 
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
