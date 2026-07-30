@@ -4,10 +4,59 @@ import rateLimit from 'express-rate-limit';
 import db from './db.js';
 
 const app = express();
-app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
-// ... MerkleTree and verifyProof stays the same ...
+// Need raw body for Paddle webhook signature verification
+app.use((req, res, next) => {
+  if (req.path === '/webhooks/paddle') {
+    express.raw({type: 'application/json'})(req, res, next);
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
+//... Your MerkleTree class and verifyProof function stays here...
+class MerkleTree {
+  constructor(leaves) {
+    this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
+    this.layers = [this.leaves];
+    while (this.layers[this.layers.length - 1].length > 1) {
+      this.layers.push(this.getNextLayer(this.layers[this.layers.length - 1]));
+    }
+  }
+  getNextLayer(layer) {
+    const nextLayer = [];
+    for (let i = 0; i < layer.length; i += 2) {
+      const left = layer[i];
+      const right = layer[i + 1] || left;
+      nextLayer.push(crypto.createHash('sha256').update(left + right).digest('hex'));
+    }
+    return nextLayer;
+  }
+  getRoot() { return this.layers[this.layers.length - 1][0]; }
+  getProof(index) {
+    const proof = [];
+    for (let i = 0; i < this.layers.length - 1; i++) {
+      const layer = this.layers[i];
+      const isRightNode = index % 2;
+      const pairIndex = isRightNode? index - 1 : index + 1;
+      if (pairIndex < layer.length) {
+        proof.push({ position: isRightNode? 'left' : 'right', data: layer[pairIndex] });
+      }
+      index = Math.floor(index / 2);
+    }
+    return proof;
+  }
+}
+function verifyProof(leaf, proof, root, index) {
+  let hash = crypto.createHash('sha256').update(leaf).digest('hex');
+  for (const node of proof) {
+    hash = node.position === 'left'
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+      : crypto.createHash('sha256').update(hash + node.data).digest('hex');
+  }
+  return hash === root;
+}
 
 const LIMITS = {
   free: { prove: 1000, verify: 5000 },
@@ -26,21 +75,17 @@ const RATE_LIMITS = {
 async function auth(req, res, next) {
   const key = req.headers['x-api-key'];
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
-
   const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]);
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid x-api-key' });
-
   req.user = result.rows[0];
   next();
 }
 
-// NEW: Auto reset usage every new month
+// Auto reset usage every new month
 async function autoReset(req, res, next) {
   const today = new Date();
   const lastReset = new Date(req.user.last_reset);
-  
-  const isNewMonth = today.getMonth() !== lastReset.getMonth() || today.getFullYear() !== lastReset.getFullYear();
-  
+  const isNewMonth = today.getMonth()!== lastReset.getMonth() || today.getFullYear()!== lastReset.getFullYear();
   if (isNewMonth) {
     await db.query('UPDATE api_keys SET prove_usage=0, verify_usage=0, last_reset=$1 WHERE id=$2', [today, req.user.id]);
     req.user.prove_usage = 0;
@@ -76,7 +121,6 @@ app.post('/apikey', async (req, res) => {
   try {
     const { email, user_id } = req.body;
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-    await db.query(`CREATE TABLE IF NOT EXISTS api_keys (id SERIAL PRIMARY KEY, user_id TEXT, email TEXT, api_key TEXT UNIQUE, tier TEXT DEFAULT 'free', billing TEXT DEFAULT NULL, paddle_subscription_id TEXT DEFAULT NULL, prove_usage INT DEFAULT 0, verify_usage INT DEFAULT 0, last_reset DATE DEFAULT CURRENT_DATE, created_at TIMESTAMP DEFAULT NOW())`);
     await db.query('INSERT INTO api_keys(email, api_key, user_id) VALUES($1, $2, $3)', [email, apiKey, user_id]);
     res.json({ apiKey, tier: 'free', billing: null, limits: LIMITS.free });
   } catch (e) {
@@ -85,7 +129,6 @@ app.post('/apikey', async (req, res) => {
   }
 });
 
-// Add autoReset to both routes
 app.post('/prove', auth, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
   try {
     const { item } = req.body;
@@ -128,6 +171,51 @@ app.get('/usage', auth, autoReset, (req, res) => {
   });
 });
 
-// ... Paddle webhook stays the same ...
+// PADDLE WEBHOOK - with signature verification
+app.post('/webhooks/paddle', async (req, res) => {
+  try {
+    const signature = req.headers['paddle-signature'];
+    const secret = process.env.PADDLE_WEBHOOK_SECRET; // Set this in Railway
+
+    if (!signature ||!secret) return res.status(400).send('Missing signature or secret');
+
+    const [ts, h1] = signature.split(';').map(s => s.split('=')[1]);
+    const signedPayload = `${ts}:${req.body.toString()}`;
+    const expectedSignature = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
+
+    if (h1!== expectedSignature) {
+      console.error('Invalid Paddle signature');
+      return res.status(401).send('Invalid signature');
+    }
+
+    const event = JSON.parse(req.body.toString());
+    console.log('Paddle Event:', event.event_type);
+
+    if (event.event_type === 'transaction.completed') {
+      const { custom_data, subscription_id, status } = event.data;
+      if (status === 'completed') {
+        await db.query(
+          `UPDATE api_keys SET tier=$1, billing=$2, paddle_subscription_id=$3 WHERE user_id=$4`,
+          [custom_data.tier, custom_data.billing, subscription_id, custom_data.user_id]
+        );
+        console.log(`Upgraded ${custom_data.user_id} to ${custom_data.tier} ${custom_data.billing}`);
+      }
+    }
+
+    if (event.event_type === 'subscription.cancelled' || event.event_type === 'subscription.paused') {
+      const subscriptionId = event.data.id;
+      await db.query(
+        `UPDATE api_keys SET tier='free', billing=NULL, paddle_subscription_id=NULL WHERE paddle_subscription_id=$1`,
+        [subscriptionId]
+      );
+      console.log(`Downgraded subscription ${subscriptionId} to free`);
+    }
+
+    res.sendStatus(200);
+  } catch (e) {
+    console.error('Webhook error:', e);
+    res.sendStatus(400);
+  }
+});
 
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
