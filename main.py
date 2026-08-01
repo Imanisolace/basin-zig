@@ -8,10 +8,10 @@ import requests
 
 app = FastAPI(title="Basin ZK API")
 
-# CORS - allow frontend to call this
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change to your domain later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -19,7 +19,7 @@ app.add_middleware(
 
 # INIT PADDLE
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
-PADDLE_API_URL = "https://sandbox-api.paddle.com" # change to https://api.paddle.com for live
+PADDLE_API_URL = "https://sandbox-api.paddle.com"
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 
 headers = {
@@ -27,12 +27,11 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# MODELS
+# MODELS - REMOVED return_url
 class CheckoutRequest(BaseModel):
     priceId: str
     email: str
     user_id: str
-    return_url: str = None  # optional, we skip for sandbox
 
 class UserRequest(BaseModel):
     user_id: str
@@ -52,15 +51,17 @@ def create_checkout(req: CheckoutRequest):
             "customer": {"email": req.email},
             "custom_data": {"user_id": req.user_id}
         }
+        print("PAYLOAD TO PADDLE:", payload)
             
         r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers, timeout=30)
         
+        print("PADDLE STATUS:", r.status_code)
+        print("PADDLE RESPONSE:", r.text)
+        
         if r.status_code != 200:
-            print("PADDLE ERROR:", r.text)
             return {"error": f"Paddle Error: {r.text}"}
             
         checkout = r.json()["data"]
-        print(f"SUCCESS: Created checkout {checkout['url']}")
         return {"url": checkout["url"]}
         
     except Exception as e:
@@ -97,5 +98,4 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    print(f"STARTING SERVER ON PORT {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
