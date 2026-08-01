@@ -11,7 +11,7 @@ app = FastAPI(title="Basin ZK API")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # change to your domain later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -32,12 +32,11 @@ class CheckoutRequest(BaseModel):
     priceId: str
     email: str
     user_id: str
-    return_url: str
+    return_url: str = None  # made optional
 
 class UserRequest(BaseModel):
     user_id: str
     email: str
-
 
 # 1. CREATE PADDLE CHECKOUT SESSION
 @app.post("/create-checkout")
@@ -47,17 +46,23 @@ def create_checkout(req: CheckoutRequest):
 
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
+        
         payload = {
             "items": [{"price_id": req.priceId, "quantity": 1}],
             "customer": {"email": req.email},
-            "custom_data": {"user_id": req.user_id},
-            "return_url": req.return_url
+            "custom_data": {"user_id": req.user_id}
         }
+        
+        # Only add return_url if provided. Skip it for sandbox testing
+        if req.return_url:
+            payload["return_url"] = req.return_url
+            
         r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers)
         r.raise_for_status()
         checkout = r.json()["data"]
         print(f"SUCCESS: Created checkout {checkout['url']}")
         return {"url": checkout["url"]}
+        
     except requests.HTTPError as e:
         print("PADDLE ERROR:", e.response.text)
         return {"error": f"Paddle Error: {e.response.text}"}
@@ -65,7 +70,6 @@ def create_checkout(req: CheckoutRequest):
         print("GENERAL ERROR:")
         print(traceback.format_exc())
         return {"error": str(e)}
-
 
 # 2. GET API KEY
 @app.post("/apikey")
@@ -78,7 +82,6 @@ def get_apikey(data: UserRequest):
         "limits": {"prove": 1000, "verify": 5000}
     }
 
-
 # 3. PROVE
 @app.post("/prove")
 def prove(data: UserRequest):
@@ -90,12 +93,10 @@ def prove(data: UserRequest):
         "proof": "zk_proof_placeholder"
     }
 
-
 # 4. HEALTH CHECK
 @app.get("/")
 def health():
     return {"status": "Basin ZK API is running"}
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
