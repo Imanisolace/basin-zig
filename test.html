@@ -2,115 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BasinZig Paddle Test</title>
-  
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
     h1 { color: #38bdf8; text-align: center; } 
-    h2 { color: #22c55e; border-bottom: 1px solid #334155; padding-bottom: 5px; }
-    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 16px; box-sizing: border-box; }
-    button { background: #0ea5e9; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; } 
-    button:hover { background: #0284c7; }
-   .tier { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
-   .tier a { display: block; text-align: center; padding: 12px; background: #22c55e; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; transition: 0.2s; }
-   .tier a:hover { background: #16a34a; }
-    #output { background: #020617; padding: 15px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; margin-top: 20px; font-size: 12px; max-height: 400px; overflow-y: auto; border: 1px solid #334155; }
-    label { font-size: 14px; color: #94a3b8; }
-    .note { background: #1e293b; padding: 10px; border-radius: 8px; font-size: 12px; color: #facc15; margin-bottom: 15px; border-left: 3px solid #facc15; }
+    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 16px; }
+    button { background: #0ea5e9; border: none; font-weight: bold; cursor: pointer; } 
+   .tier button { background: #22c55e; margin: 5px 0;}
+    #output { background: #020617; padding: 15px; border-radius: 8px; white-space: pre-wrap; font-size: 12px; margin-top: 20px; border: 1px solid #334155; }
   </style>
 </head>
 <body>
   <h1>BasinZig API + Paddle</h1>
   
-  <div class="note">
-    Test Card: 4242 4242 4242 4242 | Any future date | Any CVC | Any ZIP
-  </div>
-
   <label>User ID</label>
   <input id="userId" placeholder="test_user_123" />
-
   <label>Email</label>
   <input id="email" type="email" placeholder="test@email.com" />
-
   <button onclick="getKey()">1. Get API Key</button>
-  <input id="apiKey" placeholder="API Key will appear here" readonly />
+  <input id="apiKey" readonly />
 
-  <h2>2. Upgrade - Direct Paddle Link</h2>
-  <p style="font-size: 12px; color: #94a3b8;">Clicking will open Paddle's hosted checkout page</p>
+  <h2>2. Upgrade</h2>
   <div class="tier">
-    <a href="#" onclick="checkout('pri_01kyvnr0j567m2ns57cy0x58vw')">Pro Monthly $9</a>
-    <a href="#" onclick="checkout('pri_01kyw5pdehq2ef6n88700pgksd')">Pro Annual $90</a>
-    <a href="#" onclick="checkout('pri_01kyw65pmd1k05y7s943w9zn84')">Team Monthly $29</a>
-    <a href="#" onclick="checkout('pri_01kyw67e9xdvx9sp0bx5q8270f')">Team Annual $290</a>
-    <a href="#" onclick="checkout('pri_01kyw6b33c9q3bga83hnx0v28q')">Unlimited Monthly $99</a>
-    <a href="#" onclick="checkout('pri_01kyw6e6r9v9k27dfgtdmphv4f')">Unlimited Annual $990</a>
+    <button onclick="checkout('pri_01kyvnr0j567m2ns57cy0x58vw')">Pro Monthly $9</button>
+    <button onclick="checkout('pri_01kyw5pdehq2ef6n88700pgksd')">Pro Annual $90</button>
   </div>
 
-  <h2>3. Test API</h2>
-  <button onclick="checkUsage()">Check Usage</button>
-  <button onclick="prove()">Prove 'alice'</button>
-
-  <h2>Debug Output</h2>
-  <div id="output">Waiting for action...</div>
+  <div id="output">Waiting...</div>
 
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
+    
+    // KEY: OVERRIDE + SANDBOX
+    Paddle.Initialize({ 
+      token: 'test_06a88ff0ae7e935e5566c4c3d36',
+      environment: 'sandbox',
+      checkout: {
+        settings: {
+          displayMode: "overlay",
+          theme: "dark",
+          allowThirdPartyCookies: true
+        }
+      }
+    });
 
-    function log(data) { 
-      document.getElementById('output').innerText = JSON.stringify(data, null, 2); 
-    }
+    function log(data) { document.getElementById('output').innerText = JSON.stringify(data, null, 2); }
     
     async function getKey() {
       const email = document.getElementById('email').value; 
       const user_id = document.getElementById('userId').value;
-      if (!email || !user_id) return alert('Enter email + user_id');
-      
-      log({status: 'Calling /apikey...'});
-      try {
-        const res = await fetch(`${API_URL}/apikey`, { 
-          method: 'POST', 
-          headers: {'Content-Type': 'application/json'}, 
-          body: JSON.stringify({ email, user_id }) 
-        });
-        const data = await res.json(); 
-        if(!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        document.getElementById('apiKey').value = data.apiKey; 
-        log({success: true, ...data});
-      } catch(e) {
-        log({ERROR: e.message});
-        alert('Server Error: ' + e.message);
-      }
+      const res = await fetch(`${API_URL}/apikey`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email, user_id }) });
+      const data = await res.json(); 
+      document.getElementById('apiKey').value = data.apiKey; 
+      log(data);
     }
-    
+
     function checkout(priceId) {
       const user_id = document.getElementById('userId').value; 
       const email = document.getElementById('email').value;
       if (!user_id || !email) return alert('Set user_id and email first');
 
-      // BUILD DIRECT PADDLE SANDBOX LINK
-      const checkoutUrl = `https://checkout.paddle.com/sandbox-buy/${priceId}?email=${encodeURIComponent(email)}&passthrough=${encodeURIComponent(JSON.stringify({user_id: user_id}))}`;
-      
-      log({status: 'Opening Paddle Link', url: checkoutUrl});
-      window.open(checkoutUrl, '_blank'); // Opens in new tab
-    }
-    
-    async function checkUsage() { 
-      const key = document.getElementById('apiKey').value; 
-      if (!key) return alert('Get API Key first');
-      const res = await fetch(`${API_URL}/usage`, { headers: { 'x-api-key': key } }); 
-      log(await res.json()); 
-    }
-    
-    async function prove() { 
-      const key = document.getElementById('apiKey').value; 
-      if (!key) return alert('Get API Key first');
-      const res = await fetch(`${API_URL}/prove`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key }, 
-        body: JSON.stringify({ item: 'alice' }) 
-      }); 
-      log(await res.json()); 
+      Paddle.Checkout.open({
+        items: [{ priceId: priceId, quantity: 1 }],
+        customer: { email: email },
+        customData: { user_id: user_id },
+        settings: { 
+          successUrl: 'https://basin-zig-production.up.railway.app/welcome',
+          displayMode: 'overlay'
+        }
+      });
     }
   </script>
 </body>
