@@ -5,37 +5,43 @@
   <title>Basin ZK - Test Checkout</title>
   <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
   <style>
-    body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 20px; }
-    input, button { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-    button { background: #5f36ff; color: white; border: none; cursor: pointer; border-radius: 6px; }
+    body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 20px; background: #fafafa; }
+    input, button { padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #ddd; }
+    button { background: #5f36ff; color: white; border: none; cursor: pointer; font-weight: 600; }
     button:hover { background: #4a2ad4; }
-    .card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; }
-    #debug { background: #f5f5f5; padding: 10px; margin-top: 20px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
+    .card { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; background: white; }
+    #debug { background: #1e1e1e; color: #00ff00; padding: 15px; margin-top: 20px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border-radius: 6px; min-height: 100px; }
+    h1 { color: #5f36ff; }
   </style>
 </head>
 <body>
   <h1>Basin ZK - Paddle Sandbox Test</h1>
+  <p>Clicking will redirect you to Paddle's sandbox checkout page</p>
   
-  <label>User ID</label>
+  <label><b>User ID</b></label>
   <input id="userId" value="test_user_123" />
   
-  <label>Email</label>
-  <input id="email" value="test@test.com" />
+  <label><b>Email</b></label>
+  <input id="email" value="test@test.com" type="email" />
 
   <div class="card">
     <h3>Pro Yearly - $90/year</h3>
+    <p>Price ID: pri_01kyw5pdehq2ef6n88700pgksd</p>
     <button onclick="checkout('pri_01kyw5pdehq2ef6n88700pgksd')">Buy Yearly</button>
   </div>
 
   <div class="card">
     <h3>Pro Monthly - $9/month</h3>
+    <p>Price ID: pri_01kyvnr0j567m2ns57cy0x58vw</p>
     <button onclick="checkout('pri_01kyvnr0j567m2ns57cy0x58vw')">Buy Monthly</button>
   </div>
 
-  <button onclick="getApiKey()">Get API Key</button>
+  <hr>
+  <button onclick="getApiKey()">Get API Key from Backend</button>
   <button onclick="prove()">Prove 'alice'</button>
 
-  <div id="debug"></div>
+  <h4>Debug Log:</h4>
+  <div id="debug">Waiting for action...</div>
 
   <script>
     // 1. INIT PADDLE SANDBOX
@@ -46,10 +52,12 @@
     const API_URL = 'https://basin-zig-production.up.railway.app';
 
     function log(msg) {
-      document.getElementById('debug').innerText += msg + '\n';
+      const el = document.getElementById('debug');
+      el.innerText += '\n' + new Date().toLocaleTimeString() + ': ' + msg;
+      el.scrollTop = el.scrollHeight;
     }
 
-    // 2. CHECKOUT FUNCTION
+    // 2. CHECKOUT FUNCTION - INLINE MODE
     function checkout(priceId) {
       log('Opening checkout for: ' + priceId);
       Paddle.Checkout.open({
@@ -57,8 +65,9 @@
         customer: { email: document.getElementById('email').value },
         customData: { user_id: document.getElementById('userId').value },
         settings: { 
-          displayMode: 'overlay',
-          theme: 'light'
+          displayMode: 'inline', // KEY: Full page redirect, no domain whitelist needed
+          theme: 'light',
+          successUrl: window.location.href + '?success=true' // redirects back here after payment
         }
       });
     }
@@ -66,30 +75,40 @@
     // 3. YOUR BACKEND CALLS
     async function getApiKey() {
       log('Calling /apikey...');
-      const res = await fetch(API_URL + '/apikey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: document.getElementById('userId').value,
-          email: document.getElementById('email').value
-        })
-      });
-      const data = await res.json();
-      log('API Response: ' + JSON.stringify(data, null, 2));
+      try {
+        const res = await fetch(API_URL + '/apikey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: document.getElementById('userId').value,
+            email: document.getElementById('email').value
+          })
+        });
+        const data = await res.json();
+        log('API Response: ' + JSON.stringify(data, null, 2));
+      } catch(e) { log('Error: ' + e) }
     }
 
     async function prove() {
       log('Calling /prove...');
-      const res = await fetch(API_URL + '/prove', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: document.getElementById('userId').value,
-          email: document.getElementById('email').value
-        })
-      });
-      const data = await res.json();
-      log('Prove Response: ' + JSON.stringify(data, null, 2));
+      try {
+        const res = await fetch(API_URL + '/prove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: document.getElementById('userId').value,
+            email: document.getElementById('email').value
+          })
+        });
+        const data = await res.json();
+        log('Prove Response: ' + JSON.stringify(data, null, 2));
+      } catch(e) { log('Error: ' + e) }
+    }
+
+    // Check if we came back from payment
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.get('success')) {
+      log('SUCCESS: Payment completed!');
     }
   </script>
 </body>
