@@ -1,12 +1,16 @@
-FROM node:20-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install --omit=dev
+# Install dependencies
+COPY requirements.txt.
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copy all code
+COPY.
 
-EXPOSE 8080
+# Railway will set $PORT, but we expose 8000 for local
+EXPOSE 8000
 
-CMD ["node", "server.js"]
+# Start command - Railway will override the port with $PORT
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
