@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors'; // ADD THIS
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import db from './db.js';
@@ -13,15 +12,21 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ADD CORS - allows browser to call API
-app.use(cors());
+// Manual CORS - no package needed
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-api-key');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 // SERVE TEST PAGE
 app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, 'test.html'));
 });
 
-// ADD WELCOME PAGE FOR REDIRECT
+// WELCOME PAGE FOR PADDLE REDIRECT
 app.get('/welcome', (req, res) => {
   res.send('<h1>Payment Successful!</h1><p>Check Railway logs. Your API key is now upgraded.</p><a href="/test">Back to Test</a>');
 });
@@ -35,7 +40,7 @@ app.use((req, res, next) => {
   }
 });
 
-//... Your MerkleTree class and verifyProof function stays here...
+// MERKLE TREE
 class MerkleTree {
   constructor(leaves) {
     this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
@@ -72,7 +77,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -195,7 +200,7 @@ app.get('/usage', auth, autoReset, (req, res) => {
 app.post('/webhooks/paddle', async (req, res) => {
   try {
     const signature = req.headers['paddle-signature'];
-    const secret = process.env.PADDLE_WEBHOOK_SECRET; // Set this in Railway
+    const secret = process.env.PADDLE_WEBHOOK_SECRET;
 
     if (!signature ||!secret) return res.status(400).send('Missing signature or secret');
 
