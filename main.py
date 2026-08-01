@@ -8,7 +8,6 @@ import requests
 
 app = FastAPI(title="Basin ZK API")
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,13 +20,13 @@ app.add_middleware(
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
 PADDLE_API_URL = "https://sandbox-api.paddle.com"
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
+print("KEY STARTS WITH:", PADDLE_API_KEY[:10] if PADDLE_API_KEY else "NONE")
 
 headers = {
     "Authorization": f"Bearer {PADDLE_API_KEY}",
     "Content-Type": "application/json"
 }
 
-# MODELS - REMOVED return_url
 class CheckoutRequest(BaseModel):
     priceId: str
     email: str
@@ -37,11 +36,12 @@ class UserRequest(BaseModel):
     user_id: str
     email: str
 
-# 1. CREATE PADDLE CHECKOUT SESSION
 @app.post("/create-checkout")
 def create_checkout(req: CheckoutRequest):
     if not PADDLE_API_KEY:
         return {"error": "PADDLE_API_KEY not set on server"}
+    if not PADDLE_API_KEY.startswith("pdl_sbox_"):
+        return {"error": "You are using a LIVE key. Use SANDBOX key starting with pdl_sbox_"}
 
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
@@ -59,7 +59,7 @@ def create_checkout(req: CheckoutRequest):
         print("PADDLE RESPONSE:", r.text)
         
         if r.status_code != 200:
-            return {"error": f"Paddle Error: {r.text}"}
+            return {"error": f"Paddle Error {r.status_code}: {r.text}"}
             
         checkout = r.json()["data"]
         return {"url": checkout["url"]}
@@ -69,10 +69,8 @@ def create_checkout(req: CheckoutRequest):
         print(traceback.format_exc())
         return {"error": str(e)}
 
-# 2. GET API KEY
 @app.post("/apikey")
 def get_apikey(data: UserRequest):
-    print(f"apikey called for {data.user_id}")
     return {
         "apiKey": "zk_abafe6601f4bfef74bb54f3b4b43853b",
         "tier": "free",
@@ -80,18 +78,10 @@ def get_apikey(data: UserRequest):
         "limits": {"prove": 1000, "verify": 5000}
     }
 
-# 3. PROVE
 @app.post("/prove")
 def prove(data: UserRequest):
-    print(f"prove called for {data.user_id}")
-    return {
-        "status": "proved",
-        "user_id": data.user_id,
-        "email": data.email,
-        "proof": "zk_proof_placeholder"
-    }
+    return {"status": "proved", "user_id": data.user_id, "email": data.email, "proof": "zk_proof_placeholder"}
 
-# 4. HEALTH CHECK
 @app.get("/")
 def health():
     return {"status": "Basin ZK API is running"}
