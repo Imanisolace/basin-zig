@@ -7,8 +7,8 @@
     body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
     button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: 600; }
     button:hover { background: #333; }
-    .pricing { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
-    .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; flex: 1; min-width: 220px; text-align: center; }
+   .pricing { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
+   .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; flex: 1; min-width: 220px; text-align: center; }
     #output { background: #f5f5f5; padding: 15px; margin-top: 20px; white-space: pre-wrap; border-radius: 6px; font-size: 12px; }
     input { padding: 8px; margin: 5px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
   </style>
@@ -50,25 +50,27 @@
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
 
-    // SANDBOX INIT
-    Paddle.Setup({ 
-      token: "test_06a88ff0ae7e935e5566c4c3d36",
-      environment: "sandbox"
+    // SANDBOX INIT - PADDLE V2
+    window.addEventListener("DOMContentLoaded", () => {
+      Paddle.Initialize({
+        token: "test_06a88ff0ae7e935e5566c4c3d36",
+        environment: "sandbox",
+      });
     });
 
     // YOUR 6 SANDBOX PRICE IDS
     const PRICES = {
       pro: { 
-        monthly: 'pri_01kyvnr0j567m2ns57cy0x58vw',   
-        annually: 'pri_01kyw5pdehq2ef6n88700pgksd'    
+        monthly: 'pri_01kyvnr0j567m2ns57cy0x58vw', 
+        annually: 'pri_01kyw5pdehq2ef6n88700pgksd' 
       },
       team: { 
-        monthly: 'pri_01kyw65pmd1k05y7s943w9zn84',   
-        annually: 'pri_01kyw67e9xdvx9sp0bx5q8270f'   
+        monthly: 'pri_01kyw65pmd1k05y7s943w9zn84', 
+        annually: 'pri_01kyw67e9xdvx9sp0bx5q8270f' 
       },
       unlimited: { 
-        monthly: 'pri_01kyw6b33c9q3bga83hnx0v28q',   
-        annually: 'pri_01kyw6e6r9v9k27dfgtdmphv4f'   
+        monthly: 'pri_01kyw6b33c9q3bga83hnx0v28q', 
+        annually: 'pri_01kyw6e6r9v9k27dfgtdmphv4f' 
       }
     };
 
@@ -79,7 +81,7 @@
     async function getKey() {
       const email = document.getElementById('email').value;
       const user_id = document.getElementById('userId').value;
-      if (!email || !user_id) return alert('Enter email + user_id');
+      if (!email ||!user_id) return alert('Enter email + user_id');
 
       const res = await fetch(`${API_URL}/apikey`, {
         method: 'POST',
@@ -97,12 +99,12 @@
 
       Paddle.Checkout.open({
         settings: {
-          displayMode: 'overlay',  // 1-page overlay
-          variant: 'one-page',
+          displayMode: 'overlay',
+          theme: 'light',
           successUrl: window.location.origin + '/welcome'
         },
         items: [{ priceId: PRICES[tier][billing], quantity: 1 }],
-        customData: { user_id: user_id, tier: tier, billing: billing } // this goes to webhook
+        customData: { user_id: user_id, tier: tier, billing: billing }
       });
     }
 
