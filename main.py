@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from paddle_billing import Client, Environment
-from paddle_billing.exceptions import PaddleAPIError # NEW
 import os
 import traceback
+import uvicorn
 
 app = FastAPI(title="Basin ZK API")
 
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
-print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO") # will show in logs
+print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 paddle = Client(PADDLE_API_KEY, environment=Environment.SANDBOX)
 
 class CheckoutRequest(BaseModel):
@@ -33,7 +33,7 @@ class UserRequest(BaseModel):
 @app.post("/create-checkout")
 def create_checkout(req: CheckoutRequest):
     try:
-        print(f"Trying to create checkout for price: {req.priceId}")
+        print(f"REQUEST RECEIVED: {req.priceId}") # This MUST show in logs
         checkout = paddle.checkouts.create(
             items=[{"price_id": req.priceId, "quantity": 1}],
             customer={"email": req.email},
@@ -41,11 +41,8 @@ def create_checkout(req: CheckoutRequest):
             return_url=req.return_url
         )
         return {"url": checkout.url}
-    except PaddleAPIError as e: # Catches Paddle errors specifically
-        print("PADDLE ERROR:", e)
-        return {"error": f"Paddle Error: {e.detail}"}
     except Exception as e:
-        print("GENERAL ERROR:")
+        print("ERROR:")
         print(traceback.format_exc())
         return {"error": str(e)}
 
@@ -60,3 +57,9 @@ def prove(data: UserRequest):
 @app.get("/")
 def health():
     return {"status": "Basin ZK API is running"}
+
+# THIS IS THE FIX FOR RAILWAY
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    print(f"Starting on port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port)
