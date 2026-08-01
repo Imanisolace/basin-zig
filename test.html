@@ -1,24 +1,36 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BasinZig Paddle Test</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
-    h1 { color: #38bdf8; } input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 16px; }
-    button { background: #0ea5e9; border: none; font-weight: bold; cursor: pointer; } button:hover { background: #0284c7; }
+    h1 { color: #38bdf8; text-align: center; } 
+    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 16px; box-sizing: border-box; }
+    button { background: #0ea5e9; border: none; font-weight: bold; cursor: pointer; } 
+    button:hover { background: #0284c7; }
     .tier { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
-    .tier button { background: #22c55e; } .tier button:hover { background: #16a34a; }
+    .tier button { background: #22c55e; }
+    .tier button:hover { background: #16a34a; }
     #output { background: #020617; padding: 15px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; margin-top: 20px; font-size: 12px; max-height: 400px; overflow-y: auto; }
     label { font-size: 14px; color: #94a3b8; }
+    .note { background: #1e293b; padding: 10px; border-radius: 8px; font-size: 12px; color: #94a3b8; margin-bottom: 15px; }
   </style>
 </head>
 <body>
   <h1>BasinZig API + Paddle Test</h1>
+  
+  <div class="note">
+    Use test card: 4242 4242 4242 4242 | Any future date | Any CVC
+  </div>
+
   <label>User ID</label>
   <input id="userId" placeholder="test_user_123" />
+
   <label>Email</label>
   <input id="email" type="email" placeholder="test@email.com" />
+
   <button onclick="getKey()">1. Get API Key</button>
   <input id="apiKey" placeholder="API Key will appear here" readonly />
 
@@ -36,52 +48,80 @@
   <button onclick="checkUsage()">Check Usage</button>
   <button onclick="prove()">Prove 'alice'</button>
   <button onclick="verify()">Verify 'alice'</button>
+
+  <h2>Debug Output</h2>
   <div id="output">Waiting...</div>
 
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
     
-    // YOUR PRICE IDS FROM PADDLE SANDBOX
+    // YOUR PADDLE SANDBOX PRICE IDS
     const PRICE_ID = {
       pro: { monthly: 'pri_01kyvnr0j567m2ns57cy0x58vw', annually: 'pri_01kyw5pdehq2ef6n88700pgksd' },
       team: { monthly: 'pri_01kyw65pmd1k05y7s943w9zn84', annually: 'pri_01kyw67e9xdvx9sp0bx5q8270f' },
       unlimited: { monthly: 'pri_01kyw6b33c9q3bga83hnx0v28q', annually: 'pri_01kyw6e6r9v9k27dfgtdmphv4f' }
     };
 
-    function log(data) { document.getElementById('output').innerText = JSON.stringify(data, null, 2); }
+    function log(data) { 
+      document.getElementById('output').innerText = JSON.stringify(data, null, 2); 
+    }
     
     async function getKey() {
-      const email = document.getElementById('email').value; const user_id = document.getElementById('userId').value;
+      const email = document.getElementById('email').value; 
+      const user_id = document.getElementById('userId').value;
       if (!email || !user_id) return alert('Enter email + user_id');
-      const res = await fetch(`${API_URL}/apikey`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email, user_id }) });
-      const data = await res.json(); document.getElementById('apiKey').value = data.apiKey; log(data);
+      
+      try {
+        const res = await fetch(`${API_URL}/apikey`, { 
+          method: 'POST', 
+          headers: {'Content-Type': 'application/json'}, 
+          body: JSON.stringify({ email, user_id }) 
+        });
+        const data = await res.json(); 
+        document.getElementById('apiKey').value = data.apiKey; 
+        log(data);
+      } catch(e) {
+        log({error: e.message});
+      }
     }
     
     function checkout(tier, billing) {
-      const user_id = document.getElementById('userId').value; if (!user_id) return alert('Set user_id first');
+      const user_id = document.getElementById('userId').value; 
+      if (!user_id) return alert('Set user_id first');
+      
       const priceId = PRICE_ID[tier][billing];
-      // IMPORTANT: Paddle expects snake_case custom_data
       const custom_data = encodeURIComponent(JSON.stringify({user_id, tier, billing}));
       const successUrl = encodeURIComponent('https://basin-zig-production.up.railway.app/welcome');
+      
+      // IMPORTANT: SANDBOX DOMAIN
       const url = `https://sandbox-checkout.paddle.com/checkout?priceId=${priceId}&custom_data=${custom_data}&successUrl=${successUrl}`;
+      
       window.open(url, '_blank');
     }
     
     async function checkUsage() { 
-      const key = document.getElementById('apiKey').value; if (!key) return alert('Get API Key first');
-      const res = await fetch(`${API_URL}/usage`, { headers: { 'x-api-key': key } }); log(await res.json()); 
+      const key = document.getElementById('apiKey').value; 
+      if (!key) return alert('Get API Key first');
+      const res = await fetch(`${API_URL}/usage`, { headers: { 'x-api-key': key } }); 
+      log(await res.json()); 
     }
     
     async function prove() { 
-      const key = document.getElementById('apiKey').value; if (!key) return alert('Get API Key first');
-      const res = await fetch(`${API_URL}/prove`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key }, body: JSON.stringify({ item: 'alice' }) }); 
+      const key = document.getElementById('apiKey').value; 
+      if (!key) return alert('Get API Key first');
+      const res = await fetch(`${API_URL}/prove`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key }, 
+        body: JSON.stringify({ item: 'alice' }) 
+      }); 
       log(await res.json()); 
     }
     
     async function verify() { 
-      const key = document.getElementById('apiKey').value; if (!key) return alert('Get API Key first');
-      const res = await fetch(`${API_URL}/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': key }, body: JSON.stringify({ root: 'dummy', item: 'alice', target_index: 0, proof: [] }) }); 
-      log(await res.json()); 
+      const key = document.getElementById('apiKey').value; 
+      if (!key) return alert('Get API Key first');
+      // You need to pass real proof from /prove first
+      log({error: 'Run /prove first to get real proof data'});
     }
   </script>
 </body>
