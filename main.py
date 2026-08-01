@@ -8,7 +8,7 @@ import requests
 
 app = FastAPI(title="Basin ZK API")
 
-# CORS
+# CORS - allow frontend to call this
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # change to your domain later
@@ -32,7 +32,7 @@ class CheckoutRequest(BaseModel):
     priceId: str
     email: str
     user_id: str
-    return_url: str = None  # made optional
+    return_url: str = None  # optional, we skip for sandbox
 
 class UserRequest(BaseModel):
     user_id: str
@@ -52,20 +52,17 @@ def create_checkout(req: CheckoutRequest):
             "customer": {"email": req.email},
             "custom_data": {"user_id": req.user_id}
         }
-        
-        # Only add return_url if provided. Skip it for sandbox testing
-        if req.return_url:
-            payload["return_url"] = req.return_url
             
-        r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers)
-        r.raise_for_status()
+        r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers, timeout=30)
+        
+        if r.status_code != 200:
+            print("PADDLE ERROR:", r.text)
+            return {"error": f"Paddle Error: {r.text}"}
+            
         checkout = r.json()["data"]
         print(f"SUCCESS: Created checkout {checkout['url']}")
         return {"url": checkout["url"]}
         
-    except requests.HTTPError as e:
-        print("PADDLE ERROR:", e.response.text)
-        return {"error": f"Paddle Error: {e.response.text}"}
     except Exception as e:
         print("GENERAL ERROR:")
         print(traceback.format_exc())
