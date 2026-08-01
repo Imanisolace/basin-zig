@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from paddle_billing import Client, Environment
 import os
+import traceback
 
 app = FastAPI(title="Basin ZK API")
 
@@ -16,8 +17,11 @@ app.add_middleware(
 )
 
 # INIT PADDLE SANDBOX CLIENT
-# Make sure you add PADDLE_API_KEY in Railway Variables. Use SANDBOX key
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
+
+if not PADDLE_API_KEY:
+    print("ERROR: PADDLE_API_KEY env var is missing!")
+
 paddle = Client(PADDLE_API_KEY, environment=Environment.SANDBOX)
 
 
@@ -33,32 +37,33 @@ class UserRequest(BaseModel):
     email: str
 
 
-# 1. NEW: CREATE PADDLE CHECKOUT SESSION
+# 1. CREATE PADDLE CHECKOUT SESSION
 @app.post("/create-checkout")
 def create_checkout(req: CheckoutRequest):
     """
     Creates a Paddle checkout session and returns the hosted URL
     """
     try:
+        print(f"Creating checkout for: {req.priceId} | {req.email}")
         checkout = paddle.checkouts.create(
             items=[{"price_id": req.priceId, "quantity": 1}],
             customer={"email": req.email},
-            custom_data={"user_id": req.user_id}, # so webhook knows who paid
-            return_url=req.return_url # where user comes back after payment
+            custom_data={"user_id": req.user_id},
+            return_url=req.return_url
         )
+        print(f"Checkout URL created: {checkout.url}")
         return {"url": checkout.url}
     except Exception as e:
+        print("ERROR IN CREATE-CHECKOUT:")
+        print(traceback.format_exc())
         return {"error": str(e)}
 
 
-# 2. YOUR EXISTING: GET API KEY
+# 2. GET API KEY
 @app.post("/apikey")
 def get_apikey(data: UserRequest):
-    """
-    Your existing logic to give user an API key
-    """
-    # Example: generate or fetch from DB
-    api_key = f"zk_abafe6601f4bfef74bb54f3b4b43853b" # replace with your real logic
+    print(f"apikey called for {data.user_id}")
+    api_key = f"zk_abafe6601f4bfef74bb54f3b4b43853b"
     
     return {
         "apiKey": api_key,
@@ -71,13 +76,10 @@ def get_apikey(data: UserRequest):
     }
 
 
-# 3. YOUR EXISTING: PROVE
+# 3. PROVE
 @app.post("/prove")
 def prove(data: UserRequest):
-    """
-    Your existing prove logic
-    """
-    # Example: run your zk proof here
+    print(f"prove called for {data.user_id}")
     return {
         "status": "proved",
         "user_id": data.user_id,
