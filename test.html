@@ -59,9 +59,10 @@
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
     
-    // YOUR SANDBOX CLIENT TOKEN
+    // FORCED SANDBOX MODE
     Paddle.Initialize({ 
-      token: 'test_06a88ff0ae7e935e5566c4c3d36' 
+      token: 'test_06a88ff0ae7e935e5566c4c3d36',
+      environment: 'sandbox'
     });
 
     function log(data) { 
