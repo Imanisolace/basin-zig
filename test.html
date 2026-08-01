@@ -1,76 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Basin ZK API - Sandbox Test</title>
-  <script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BasinZig Paddle Test</title>
   <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
-    button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #000; color: #fff; border: none; border-radius: 6px; font-weight: 600; }
-    button:hover { background: #333; }
-   .pricing { display: flex; gap: 15px; margin: 20px 0; flex-wrap: wrap; }
-   .card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; flex: 1; min-width: 220px; text-align: center; }
-    #output { background: #f5f5f5; padding: 15px; margin-top: 20px; white-space: pre-wrap; border-radius: 6px; font-size: 12px; }
-    input { padding: 8px; margin: 5px; width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
+    h1 { color: #38bdf8; }
+    input, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 16px; }
+    button { background: #0ea5e9; border: none; font-weight: bold; cursor: pointer; }
+    button:hover { background: #0284c7; }
+    .tier { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+    .tier button { background: #22c55e; }
+    .tier button:hover { background: #16a34a; }
+    #output { background: #020617; padding: 15px; border-radius: 8px; white-space: pre-wrap; word-break: break-all; margin-top: 20px; font-size: 12px; }
+    label { font-size: 14px; color: #94a3b8; }
   </style>
 </head>
 <body>
-  <h1>Basin ZK API Test - SANDBOX</h1>
+  <h1>BasinZig API + Paddle Test</h1>
 
-  <h2>1. Set User ID + Get API Key</h2>
-  <input id="userId" placeholder="user_id e.g. user_123" />
-  <input id="email" placeholder="email" />
-  <button onclick="getKey()">Get Free Key</button>
+  <label>User ID</label>
+  <input id="userId" placeholder="test_user_123" />
 
-  <h2>2. Upgrade</h2>
-  <div class="pricing">
-    <div class="card">
-      <h3>Pro</h3>
-      <button onclick="checkout('pro', 'monthly')">Pro Monthly</button>
-      <button onclick="checkout('pro', 'annually')">Pro Annual</button>
-    </div>
-    <div class="card">
-      <h3>Team</h3>
-      <button onclick="checkout('team', 'monthly')">Team Monthly</button>
-      <button onclick="checkout('team', 'annually')">Team Annual</button>
-    </div>
-    <div class="card">
-      <h3>Unlimited</h3>
-      <button onclick="checkout('unlimited', 'monthly')">Unlimited Monthly</button>
-      <button onclick="checkout('unlimited', 'annually')">Unlimited Annual</button>
-    </div>
+  <label>Email</label>
+  <input id="email" type="email" placeholder="test@email.com" />
+
+  <button onclick="getKey()">1. Get API Key</button>
+  <input id="apiKey" placeholder="Your API Key will appear here" readonly />
+
+  <h2>2. Checkout</h2>
+  <div class="tier">
+    <button onclick="checkout('pro','monthly')">Pro Monthly $9</button>
+    <button onclick="checkout('pro','annually')">Pro Annual $90</button>
+    <button onclick="checkout('team','monthly')">Team Monthly $29</button>
+    <button onclick="checkout('team','annually')">Team Annual $290</button>
+    <button onclick="checkout('unlimited','monthly')">Unlimited Monthly $99</button>
+    <button onclick="checkout('unlimited','annually')">Unlimited Annual $990</button>
   </div>
 
   <h2>3. Test API</h2>
-  <input id="apiKey" placeholder="Your zk_... key" />
   <button onclick="checkUsage()">Check Usage</button>
-  <button onclick="prove()">Test /prove</button>
+  <button onclick="prove()">Prove 'alice'</button>
 
-  <div id="output"></div>
+  <h2>Debug Output</h2>
+  <div id="output">Waiting...</div>
 
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
 
-    // SANDBOX INIT - PADDLE V2
-    window.addEventListener("DOMContentLoaded", () => {
-      Paddle.Initialize({
-        token: "test_06a88ff0ae7e935e5566c4c3d36",
-        environment: "sandbox",
-      });
-    });
-
-    // YOUR 6 SANDBOX PRICE IDS
-    const PRICES = {
+    // YOUR PADDLE HOSTED CHECKOUT LINKS
+    // Replace the others when you make them
+    const LINKS = {
       pro: { 
-        monthly: 'pri_01kyvnr0j567m2ns57cy0x58vw', 
-        annually: 'pri_01kyw5pdehq2ef6n88700pgksd' 
+        monthly: 'https://sandbox-pay.paddle.io/hsc_01kyyg9gt198kgx7rrsj29xt0p_aj5g4kc5pv1xfvtrejkj6z4f349w5j1x', 
+        annually: 'https://sandbox-pay.paddle.io/REPLACE_WITH_ANNUAL_LINK' 
       },
       team: { 
-        monthly: 'pri_01kyw65pmd1k05y7s943w9zn84', 
-        annually: 'pri_01kyw67e9xdvx9sp0bx5q8270f' 
+        monthly: 'https://sandbox-pay.paddle.io/REPLACE_WITH_TEAM_MONTHLY_LINK', 
+        annually: 'https://sandbox-pay.paddle.io/REPLACE_WITH_TEAM_ANNUAL_LINK' 
       },
       unlimited: { 
-        monthly: 'pri_01kyw6b33c9q3bga83hnx0v28q', 
-        annually: 'pri_01kyw6e6r9v9k27dfgtdmphv4f' 
+        monthly: 'https://sandbox-pay.paddle.io/REPLACE_WITH_UNLIMITED_MONTHLY_LINK', 
+        annually: 'https://sandbox-pay.paddle.io/REPLACE_WITH_UNLIMITED_ANNUAL_LINK' 
       }
     };
 
@@ -81,7 +73,7 @@
     async function getKey() {
       const email = document.getElementById('email').value;
       const user_id = document.getElementById('userId').value;
-      if (!email ||!user_id) return alert('Enter email + user_id');
+      if (!email || !user_id) return alert('Enter email + user_id');
 
       const res = await fetch(`${API_URL}/apikey`, {
         method: 'POST',
@@ -97,25 +89,26 @@
       const user_id = document.getElementById('userId').value;
       if (!user_id) return alert('Set user_id first');
 
-      Paddle.Checkout.open({
-        settings: {
-          displayMode: 'overlay',
-          theme: 'light',
-          successUrl: window.location.origin + '/welcome'
-        },
-        items: [{ priceId: PRICES[tier][billing], quantity: 1 }],
-        customData: { user_id: user_id, tier: tier, billing: billing }
-      });
+      let url = LINKS[tier][billing];
+      if (url.includes('REPLACE')) return alert(`Make the ${tier} ${billing} hosted checkout link first in Paddle`);
+
+      // Add user_id so webhook knows who to upgrade
+      const customData = encodeURIComponent(JSON.stringify({user_id, tier, billing}));
+      url += `&customData=${customData}`;
+      
+      window.open(url, '_blank'); // opens in new tab on phone
     }
 
     async function checkUsage() {
       const key = document.getElementById('apiKey').value;
+      if (!key) return alert('Get API Key first');
       const res = await fetch(`${API_URL}/usage`, { headers: { 'x-api-key': key } });
       log(await res.json());
     }
 
     async function prove() {
       const key = document.getElementById('apiKey').value;
+      if (!key) return alert('Get API Key first');
       const res = await fetch(`${API_URL}/prove`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': key },
