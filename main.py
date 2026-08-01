@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from paddle_billing import Client, Environment
+from paddle_billing import Client, Environments
 from paddle_billing.exceptions import PaddleAPIError
 import os
 import traceback
@@ -12,7 +12,7 @@ app = FastAPI(title="Basin ZK API")
 # CORS - allow your html.to site
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change to "https://htmledit.squarefree.com" later
+    allow_origins=["*"], # change to "https://htmledit.squarefree.com" later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,7 +23,7 @@ PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 
 if PADDLE_API_KEY:
-    paddle = Client(PADDLE_API_KEY, environment=Environment.SANDBOX)
+    paddle = Client(PADDLE_API_KEY, environment=Environments.SANDBOX)
 else:
     paddle = None
     print("WARNING: PADDLE_API_KEY not set")
@@ -45,7 +45,7 @@ class UserRequest(BaseModel):
 def create_checkout(req: CheckoutRequest):
     if not paddle:
         return {"error": "PADDLE_API_KEY not set on server"}
-    
+
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
         checkout = paddle.checkouts.create(
