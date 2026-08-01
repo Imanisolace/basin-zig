@@ -7,10 +7,10 @@ COPY requirements.txt.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all code
-COPY.
+COPY..
 
-# Railway will set $PORT, but we expose 8000 for local
+# Railway will set $PORT
 EXPOSE 8000
 
-# Start command - Railway will override the port with $PORT
+# Start command
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
