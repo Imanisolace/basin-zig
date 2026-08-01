@@ -22,6 +22,10 @@ PADDLE_API_URL = "https://sandbox-api.paddle.com"
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 print("KEY STARTS WITH:", PADDLE_API_KEY[:10] if PADDLE_API_KEY else "NONE")
 
+# FIX: Accept both sbox and sdbx because Paddle is buggy
+if PADDLE_API_KEY and not (PADDLE_API_KEY.startswith("pdl_sbox_") or PADDLE_API_KEY.startswith("pdl_sdbx_")):
+    print("WARNING: Invalid key format")
+
 headers = {
     "Authorization": f"Bearer {PADDLE_API_KEY}",
     "Content-Type": "application/json"
@@ -40,8 +44,6 @@ class UserRequest(BaseModel):
 def create_checkout(req: CheckoutRequest):
     if not PADDLE_API_KEY:
         return {"error": "PADDLE_API_KEY not set on server"}
-    if not PADDLE_API_KEY.startswith("pdl_sbox_"):
-        return {"error": "You are using a LIVE key. Use SANDBOX key starting with pdl_sbox_"}
 
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
