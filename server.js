@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors'; // ADD THIS
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import db from './db.js';
@@ -12,9 +13,17 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// SERVE TEST PAGE - ADD THIS
+// ADD CORS - allows browser to call API
+app.use(cors());
+
+// SERVE TEST PAGE
 app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, 'test.html'));
+});
+
+// ADD WELCOME PAGE FOR REDIRECT
+app.get('/welcome', (req, res) => {
+  res.send('<h1>Payment Successful!</h1><p>Check Railway logs. Your API key is now upgraded.</p><a href="/test">Back to Test</a>');
 });
 
 // Need raw body for Paddle webhook signature verification
@@ -63,7 +72,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
