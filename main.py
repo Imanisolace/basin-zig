@@ -1,32 +1,31 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from paddle_billing import Client, Environments
-from paddle_billing.exceptions import PaddleAPIError
 import os
 import traceback
 import uvicorn
+import requests
 
 app = FastAPI(title="Basin ZK API")
 
-# CORS - allow your html.to site
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # change to "https://htmledit.squarefree.com" later
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# INIT PADDLE SANDBOX CLIENT
+# INIT PADDLE
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
+PADDLE_API_URL = "https://sandbox-api.paddle.com" # change to https://api.paddle.com for live
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 
-if PADDLE_API_KEY:
-    paddle = Client(PADDLE_API_KEY, environment=Environments.SANDBOX)
-else:
-    paddle = None
-    print("WARNING: PADDLE_API_KEY not set")
+headers = {
+    "Authorization": f"Bearer {PADDLE_API_KEY}",
+    "Content-Type": "application/json"
+}
 
 # MODELS
 class CheckoutRequest(BaseModel):
@@ -43,22 +42,25 @@ class UserRequest(BaseModel):
 # 1. CREATE PADDLE CHECKOUT SESSION
 @app.post("/create-checkout")
 def create_checkout(req: CheckoutRequest):
-    if not paddle:
+    if not PADDLE_API_KEY:
         return {"error": "PADDLE_API_KEY not set on server"}
 
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
-        checkout = paddle.checkouts.create(
-            items=[{"price_id": req.priceId, "quantity": 1}],
-            customer={"email": req.email},
-            custom_data={"user_id": req.user_id},
-            return_url=req.return_url
-        )
-        print(f"SUCCESS: Created checkout {checkout.url}")
-        return {"url": checkout.url}
-    except PaddleAPIError as e:
-        print("PADDLE ERROR:", e)
-        return {"error": f"Paddle Error: {e.detail}"}
+        payload = {
+            "items": [{"price_id": req.priceId, "quantity": 1}],
+            "customer": {"email": req.email},
+            "custom_data": {"user_id": req.user_id},
+            "return_url": req.return_url
+        }
+        r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers)
+        r.raise_for_status()
+        checkout = r.json()["data"]
+        print(f"SUCCESS: Created checkout {checkout['url']}")
+        return {"url": checkout["url"]}
+    except requests.HTTPError as e:
+        print("PADDLE ERROR:", e.response.text)
+        return {"error": f"Paddle Error: {e.response.text}"}
     except Exception as e:
         print("GENERAL ERROR:")
         print(traceback.format_exc())
@@ -73,10 +75,7 @@ def get_apikey(data: UserRequest):
         "apiKey": "zk_abafe6601f4bfef74bb54f3b4b43853b",
         "tier": "free",
         "billing": None,
-        "limits": {
-            "prove": 1000,
-            "verify": 5000
-        }
+        "limits": {"prove": 1000, "verify": 5000}
     }
 
 
@@ -98,7 +97,6 @@ def health():
     return {"status": "Basin ZK API is running"}
 
 
-# THIS IS THE CRITICAL PART FOR RAILWAY
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"STARTING SERVER ON PORT {port}")
