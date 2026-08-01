@@ -57,17 +57,18 @@
       el.scrollTop = el.scrollHeight;
     }
 
-    // 2. CHECKOUT FUNCTION - INLINE MODE
+    // 2. CHECKOUT FUNCTION - FIXED: customData must be string
     function checkout(priceId) {
       log('Opening checkout for: ' + priceId);
       Paddle.Checkout.open({
         items: [{ priceId: priceId, quantity: 1 }],
         customer: { email: document.getElementById('email').value },
-        customData: { user_id: document.getElementById('userId').value },
+        customData: JSON.stringify({ user_id: document.getElementById('userId').value }), // FIXED
         settings: { 
-          displayMode: 'inline', // KEY: Full page redirect, no domain whitelist needed
+          displayMode: 'inline',
           theme: 'light',
-          successUrl: window.location.href + '?success=true' // redirects back here after payment
+          successUrl: window.location.href + '?success=true',
+          allowLogout: false
         }
       });
     }
