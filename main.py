@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
-import traceback
 import uvicorn
 import requests
 
@@ -16,7 +15,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# INIT PADDLE
 PADDLE_API_KEY = os.getenv("PADDLE_API_KEY")
 PADDLE_API_URL = "https://sandbox-api.paddle.com"
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
@@ -24,7 +22,8 @@ print("KEY STARTS WITH:", PADDLE_API_KEY[:10] if PADDLE_API_KEY else "NONE")
 
 headers = {
     "Authorization": f"Bearer {PADDLE_API_KEY}",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
+    "Paddle-Version": "1" # Important for sandbox
 }
 
 class CheckoutRequest(BaseModel):
@@ -42,42 +41,32 @@ def create_checkout(req: CheckoutRequest):
         return {"error": "PADDLE_API_KEY not set on server"}
 
     try:
-        print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
-
         payload = {
             "items": [{"price_id": req.priceId, "quantity": 1}],
             "customer": {"email": req.email},
-            "billing_details": {  # <-- THIS IS THE FIX FOR SANDBOX
-                "enable_checkout": True
-            },
-            "custom_data": {"user_id": req.user_id}
+            "custom_data": {"user_id": req.user_id},
+            "collection_mode": "subscribe", # <-- THIS FIXES IT
+            "billing_details": {"enable_checkout": True}
         }
         print("PAYLOAD TO PADDLE:", payload)
-
+            
         r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers, timeout=30)
-
+        
         print("PADDLE STATUS:", r.status_code)
         print("PADDLE RESPONSE:", r.text)
-
-        if r.status_code != 200:
+        
+        if r.status_code not in [200, 201]:
             return {"error": f"Paddle Error {r.status_code}: {r.text}"}
-
+            
         checkout = r.json()["data"]
         return {"url": checkout["url"]}
-
+        
     except Exception as e:
-        print("GENERAL ERROR:")
-        print(traceback.format_exc())
         return {"error": str(e)}
 
 @app.post("/apikey")
 def get_apikey(data: UserRequest):
-    return {
-        "apiKey": "zk_abafe6601f4bfef74bb54f3b4b43853b",
-        "tier": "free",
-        "billing": None,
-        "limits": {"prove": 1000, "verify": 5000}
-    }
+    return {"apiKey": "zk_abafe6601f4bfef74bb54f3b4b43853b", "tier": "free", "billing": None, "limits": {"prove": 1000, "verify": 5000}}
 
 @app.post("/prove")
 def prove(data: UserRequest):
