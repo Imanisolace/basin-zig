@@ -22,10 +22,6 @@ PADDLE_API_URL = "https://sandbox-api.paddle.com"
 print("PADDLE KEY LOADED:", "YES" if PADDLE_API_KEY else "NO")
 print("KEY STARTS WITH:", PADDLE_API_KEY[:10] if PADDLE_API_KEY else "NONE")
 
-# FIX: Accept both sbox and sdbx because Paddle is buggy
-if PADDLE_API_KEY and not (PADDLE_API_KEY.startswith("pdl_sbox_") or PADDLE_API_KEY.startswith("pdl_sdbx_")):
-    print("WARNING: Invalid key format")
-
 headers = {
     "Authorization": f"Bearer {PADDLE_API_KEY}",
     "Content-Type": "application/json"
@@ -47,25 +43,28 @@ def create_checkout(req: CheckoutRequest):
 
     try:
         print(f"REQUEST RECEIVED: {req.priceId} for {req.email}")
-        
+
         payload = {
             "items": [{"price_id": req.priceId, "quantity": 1}],
             "customer": {"email": req.email},
+            "billing_details": {  # <-- THIS IS THE FIX FOR SANDBOX
+                "enable_checkout": True
+            },
             "custom_data": {"user_id": req.user_id}
         }
         print("PAYLOAD TO PADDLE:", payload)
-            
+
         r = requests.post(f"{PADDLE_API_URL}/checkouts", json=payload, headers=headers, timeout=30)
-        
+
         print("PADDLE STATUS:", r.status_code)
         print("PADDLE RESPONSE:", r.text)
-        
+
         if r.status_code != 200:
             return {"error": f"Paddle Error {r.status_code}: {r.text}"}
-            
+
         checkout = r.json()["data"]
         return {"url": checkout["url"]}
-        
+
     except Exception as e:
         print("GENERAL ERROR:")
         print(traceback.format_exc())
