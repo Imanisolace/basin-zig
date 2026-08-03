@@ -6,11 +6,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // Railway will override this to 8080
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // pdl_live_... for production
+const PADDLE_CLIENT_TOKEN = process.env.PADDLE_CLIENT_TOKEN; // test_... or live_...
 const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app';
+
+// DEBUG LOGS
+console.log("PADDLE API KEY LOADED:", PADDLE_API_KEY? PADDLE_API_KEY.substring(0,8) + "..." : "MISSING");
+console.log("PADDLE CLIENT TOKEN LOADED:", PADDLE_CLIENT_TOKEN? PADDLE_CLIENT_TOKEN.substring(0,8) + "..." : "MISSING");
 
 // Manual CORS
 app.use((req, res, next) => {
@@ -77,7 +82,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -151,7 +156,7 @@ app.post('/create-checkout', auth, async (req, res) => {
     if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
 
     const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
-     ? 'https://api.paddle.com'
+    ? 'https://api.paddle.com'
       : 'https://sandbox-api.paddle.com';
 
     console.log('Creating checkout for:', { price_id, email, user_id });
@@ -181,7 +186,7 @@ app.post('/create-checkout', auth, async (req, res) => {
     const payload = {
       items: [{ price_id, quantity: 1 }],
       customer_id: customerId,
-      customer_email: email, // REQUIRED BY PADDLE LIVE
+      customer_email: email,
       custom_data: {
         user_id: String(user_id),
         tier: 'pro',
