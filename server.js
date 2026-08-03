@@ -6,10 +6,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Railway will override this to 8080
+const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // pdl_live_... for production
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY?.trim(); // <-- ADDED.trim() to remove spaces
 const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app';
 
 // Manual CORS
@@ -21,67 +21,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// SERVE TEST PAGE
-app.get('/test', (req, res) => {
-  res.sendFile(path.join(__dirname, 'test.html'));
-});
+app.get('/test', (req, res) => res.sendFile(path.join(__dirname, 'test.html')));
+app.get('/welcome', (req, res) => res.send('<h1>Payment Successful!</h1><p>Check Railway logs. Your API key is now upgraded.</p><a href="/test">Back to Test</a>'));
 
-// WELCOME PAGE FOR PADDLE REDIRECT
-app.get('/welcome', (req, res) => {
-  res.send('<h1>Payment Successful!</h1><p>Check Railway logs. Your API key is now upgraded.</p><a href="/test">Back to Test</a>');
-});
-
-// Need raw body for Paddle webhook signature verification
 app.use((req, res, next) => {
-  if (req.path === '/webhooks/paddle') {
-    express.raw({type: 'application/json'})(req, res, next);
-  } else {
-    express.json()(req, res, next);
-  }
+  if (req.path === '/webhooks/paddle') express.raw({type: 'application/json'})(req, res, next);
+  else express.json()(req, res, next);
 });
 
-// MERKLE TREE
-class MerkleTree {
-  constructor(leaves) {
-    this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
-    this.layers = [this.leaves];
-    while (this.layers[this.layers.length - 1].length > 1) {
-      this.layers.push(this.getNextLayer(this.layers[this.layers.length - 1]));
-    }
-  }
-  getNextLayer(layer) {
-    const nextLayer = [];
-    for (let i = 0; i < layer.length; i += 2) {
-      const left = layer[i];
-      const right = layer[i + 1] || left;
-      nextLayer.push(crypto.createHash('sha256').update(left + right).digest('hex'));
-    }
-    return nextLayer;
-  }
-  getRoot() { return this.layers[this.layers.length - 1][0]; }
-  getProof(index) {
-    const proof = [];
-    for (let i = 0; i < this.layers.length - 1; i++) {
-      const layer = this.layers[i];
-      const isRightNode = index % 2;
-      const pairIndex = isRightNode? index - 1 : index + 1;
-      if (pairIndex < layer.length) {
-        proof.push({ position: isRightNode? 'left' : 'right', data: layer[pairIndex] });
-      }
-      index = Math.floor(index / 2);
-    }
-    return proof;
-  }
-}
-function verifyProof(leaf, proof, root, index) {
-  let hash = crypto.createHash('sha256').update(leaf).digest('hex');
-  for (const node of proof) {
-    hash = node.position === 'left'
-   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
-      : crypto.createHash('sha256').update(hash + node.data).digest('hex');
-  }
-  return hash === root;
-}
+// MERKLE TREE - same as before
+class MerkleTree { /*... keep your class... */ }
+function verifyProof(leaf, proof, root, index) { /*... keep... */ }
 
 const LIMITS = {
   free: { prove: 1000, verify: 5000 },
@@ -97,6 +47,17 @@ const RATE_LIMITS = {
   unlimited: { windowMs: 60 * 1000, max: 10000 }
 };
 
+// FIX 1: Create limiters once at startup, not per request
+const limiters = {};
+for (const tier in RATE_LIMITS) {
+  limiters[tier] = rateLimit({
+    windowMs: RATE_LIMITS[tier].windowMs,
+    max: RATE_LIMITS[tier].max,
+    keyGenerator: (req) => req.user.api_key,
+    message: { error: `Rate limit exceeded for ${tier} tier. ${RATE_LIMITS[tier].max} req/min` }
+  });
+}
+
 async function auth(req, res, next) {
   const key = req.headers['x-api-key'];
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
@@ -106,7 +67,6 @@ async function auth(req, res, next) {
   next();
 }
 
-// Auto reset usage every new month
 async function autoReset(req, res, next) {
   const today = new Date();
   const lastReset = new Date(req.user.last_reset);
@@ -119,52 +79,36 @@ async function autoReset(req, res, next) {
   next();
 }
 
-const dynamicRateLimit = async (req, res, next) => {
+// FIX 2: Middleware to pick the right limiter
+const dynamicRateLimit = (req, res, next) => {
   const tier = req.user.tier || 'free';
-  const limits = RATE_LIMITS[tier];
-  return rateLimit({
-    windowMs: limits.windowMs,
-    max: limits.max,
-    keyGenerator: () => req.user.api_key,
-    message: { error: `Rate limit exceeded for ${tier} tier. ${limits.max} req/min` }
-  })(req, res, next);
+  return limiters[tier](req, res, next);
 };
 
 async function checkLimit(req, res, next, type) {
   const tier = req.user.tier || 'free';
   const limit = LIMITS[tier][type];
   const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
-  if (used >= limit) {
-    return res.status(429).json({ error: `Monthly limit reached for ${tier} tier. Upgrade at /pricing` });
-  }
+  if (used >= limit) return res.status(429).json({ error: `Monthly limit reached for ${tier} tier. Upgrade at /pricing` });
   next();
 }
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// CREATE CHECKOUT - PADDLE LIVE
 app.post('/create-checkout', auth, async (req, res) => {
   try {
     const { price_id } = req.body;
     const { id: user_id, email, tier, paddle_customer_id } = req.user;
-
     if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
 
-    const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
-   ? 'https://api.paddle.com'
-      : 'https://sandbox-api.paddle.com';
-
+    const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com';
     console.log('Creating checkout for:', { price_id, email, user_id });
 
-    // STEP 1: Create Customer in Paddle if we don't have one
     let customerId = paddle_customer_id;
     if (!customerId) {
       const customerRes = await fetch(`${PADDLE_API_URL}/customers`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${PADDLE_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Authorization': `Bearer ${PADDLE_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
       const customerData = await customerRes.json();
@@ -174,149 +118,31 @@ app.post('/create-checkout', auth, async (req, res) => {
       }
       customerId = customerData.data.id;
       await db.query('UPDATE api_keys SET paddle_customer_id=$1 WHERE id=$2', [customerId, req.user.id]);
-      console.log(`Created Paddle customer ${customerId}`);
     }
 
-    // STEP 2: Create Transaction
     const payload = {
       items: [{ price_id, quantity: 1 }],
       customer_id: customerId,
       customer_email: email,
-      custom_data: {
-        user_id: String(user_id),
-        tier: 'pro',
-        billing: price_id.includes('year')? 'yearly' : 'monthly'
-      },
+      custom_data: { user_id: String(user_id), tier: 'pro', billing: price_id.includes('year')? 'yearly' : 'monthly' },
       return_url: `https://${YOUR_DOMAIN}/welcome`
     };
 
     const response = await fetch(`${PADDLE_API_URL}/transactions`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PADDLE_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Authorization': `Bearer ${PADDLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-
     const data = await response.json();
-
-    if (!response.ok) {
-      console.error('Paddle Response:', response.status, data);
-      return res.status(response.status).json(data);
-    }
-
+    if (!response.ok) { console.error('Paddle Response:', response.status, data); return res.status(response.status).json(data); }
     res.json({ url: data.data.checkout.url });
-  } catch (e) {
-    console.error('Create checkout error:', e);
-    res.status(500).json({ error: e.message });
-  }
+  } catch (e) { console.error('Create checkout error:', e); res.status(500).json({ error: e.message }); }
 });
 
-app.post('/apikey', async (req, res) => {
-  try {
-    const { email, user_id } = req.body;
-    const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-    await db.query('INSERT INTO api_keys(email, api_key, user_id) VALUES($1, $2, $3)', [email, apiKey, user_id]);
-    res.json({ apiKey, tier: 'free', billing: null, limits: LIMITS.free });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/prove', auth, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
-  try {
-    const { item } = req.body;
-    if (!item) return res.status(400).json({ error: 'item required' });
-    const dataset = ['alice', 'bob', 'charlie', 'dave'];
-    const tree = new MerkleTree(dataset);
-    const index = dataset.indexOf(item);
-    if (index === -1) return res.status(404).json({ error: 'item not found' });
-    const proof = tree.getProof(index);
-    const root = tree.getRoot();
-    await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]);
-    res.json({ root, proof, target_index: index, valid: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/verify', auth, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
-  try {
-    const { root, item, target_index, proof } = req.body;
-    const valid = verifyProof(item, proof, root, target_index);
-    await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]);
-    res.json({ valid });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.get('/usage', auth, autoReset, (req, res) => {
-  const tier = req.user.tier || 'free';
-  res.json({
-    tier: tier,
-    billing: req.user.billing,
-    limits: LIMITS[tier],
-    rate_limit: RATE_LIMITS[tier],
-    usage: { prove: req.user.prove_usage, verify: req.user.verify_usage },
-    last_reset: req.user.last_reset
-  });
-});
-
-// PADDLE WEBHOOK
-app.post('/webhooks/paddle', async (req, res) => {
-  try {
-    const signature = req.headers['paddle-signature'];
-    const secret = process.env.PADDLE_WEBHOOK_SECRET;
-    if (!signature ||!secret) return res.status(400).send('Missing signature or secret');
-
-    const [ts, h1] = signature.split(';').map(s => s.split('=')[1]);
-    const signedPayload = `${ts}:${req.body.toString()}`;
-    const expectedSignature = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-    if (h1!== expectedSignature) {
-      console.error('Invalid Paddle signature');
-      return res.status(401).send('Invalid signature');
-    }
-
-    const event = JSON.parse(req.body.toString());
-    console.log('Paddle Event:', event.event_type);
-    const data = event.data;
-    const customData = data.custom_data;
-
-    if (event.event_type === 'transaction.completed' && data.status === 'completed') {
-      if (customData?.user_id) {
-        await db.query(
-          `UPDATE api_keys SET tier=$1, billing=$2, paddle_subscription_id=$3 WHERE user_id=$4`,
-          [customData.tier, customData.billing, data.subscription_id, customData.user_id]
-        );
-        console.log(`Upgraded ${customData.user_id} to ${customData.tier} ${customData.billing}`);
-      }
-    }
-
-    if (event.event_type === 'subscription.active') {
-        if (customData?.user_id) {
-            await db.query(`UPDATE api_keys SET tier='pro' WHERE user_id=$1`, [customData.user_id]);
-        }
-    }
-
-    if (event.event_type === 'subscription.cancelled' || event.event_type === 'subscription.paused') {
-      const subscriptionId = data.id;
-      await db.query(
-        `UPDATE api_keys SET tier='free', billing=NULL, paddle_subscription_id=NULL WHERE paddle_subscription_id=$1`,
-        [subscriptionId]
-      );
-      console.log(`Downgraded subscription ${subscriptionId} to free`);
-    }
-
-    res.sendStatus(200);
-  } catch (e) {
-    console.error('Webhook error:', e);
-    res.sendStatus(500);
-  }
-});
+app.post('/apikey', async (req, res) => { /*... keep... */ });
+app.post('/prove', auth, autoReset, dynamicRateLimit, (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => { /*... keep... */ });
+app.post('/verify', auth, autoReset, dynamicRateLimit, (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => { /*... keep... */ });
+app.get('/usage', auth, autoReset, (req, res) => { /*... keep... */ });
+app.post('/webhooks/paddle', async (req, res) => { /*... keep... */ });
 
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
