@@ -2,22 +2,23 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Basin ZK - Test Checkout</title>
+  <title>Basin ZK - Test Checkout LIVE</title>
   <style>
     body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 20px; background: #fafafa; }
     input, button, a.button { padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; border-radius: 6px; border: 1px solid #ddd; font-size: 16px; text-decoration: none; display: block; text-align: center; }
-    button { background:  #5f36ff; color: white; border: none; cursor: pointer; font-weight: 600; }
+    button { background: #5f36ff; color: white; border: none; cursor: pointer; font-weight: 600; }
     button:hover { background: #4a2ad4; }
     a.button { background: #10b981; color: white; border: none; cursor: pointer; font-weight: 600; }
     a.button:hover { background: #059669; }
-    .card { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; background: white; }
+   .card { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; background: white; }
     #debug { background: #1e1e1e; color: #00ff00; padding: 15px; margin-top: 20px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border-radius: 6px; min-height: 100px; }
     h1 { color: #5f36ff; }
+   .disabled { opacity: 0.5; pointer-events: none; }
   </style>
 </head>
 <body>
-  <h1>Basin ZK - Paddle Sandbox Test</h1>
-  <p>Clicking will create a checkout session and redirect you</p>
+  <h1>Basin ZK - Paddle LIVE Test</h1>
+  <p>1. Get API Key first. 2. Then buy.</p>
 
   <label><b>User ID</b></label>
   <input id="userId" value="test_user_123" />
@@ -25,28 +26,51 @@
   <label><b>Email</b></label>
   <input id="email" value="test@test.com" type="email" />
 
+  <button onclick="getApiKey()">1. Get API Key from Backend</button>
+  <p id="apiKeyDisplay"></p>
+
   <div class="card">
     <h3>Pro Yearly - $90/year</h3>
-    <p>Price ID: pri_01kyw5pdehq2ef6n88700pgksd</p>
-    <a class="button" onclick="createCheckout('pri_01kyw5pdehq2ef6n88700pgksd')">Buy Yearly</a>
+    <p>Price ID: pri_01kys74gy5hf3jtva5rx5a8cq8</p>
+    <a class="button disabled" id="buyYearly" onclick="buyPlan('pro_annually')">Buy Yearly</a>
   </div>
 
   <div class="card">
     <h3>Pro Monthly - $9/month</h3>
-    <p>Price ID: pri_01kyvnr0j567m2ns57cy0x58vw</p>
-    <a class="button" onclick="createCheckout('pri_01kyvnr0j567m2ns57cy0x58vw')">Buy Monthly</a>
+    <p>Price ID: pri_01kys708vdfs6wfchamrmvvv4p</p>
+    <a class="button disabled" id="buyMonthly" onclick="buyPlan('pro_monthly')">Buy Monthly</a>
+  </div>
+
+  <div class="card">
+    <h3>Team Monthly - $99/month</h3>
+    <p>Price ID: pri_01kys7jtht7krtqzcnssrm1e77</p>
+    <a class="button disabled" id="buyTeamM" onclick="buyPlan('team_monthly')">Buy Team Monthly</a>
+  </div>
+
+  <div class="card">
+    <h3>Unlimited Monthly - $499/month</h3>
+    <p>Price ID: pri_01kysh67sepm5cwf4j7nm1cwb3</p>
+    <a class="button disabled" id="buyUnlimitedM" onclick="buyPlan('unlimited_monthly')">Buy Unlimited</a>
   </div>
 
   <hr>
-  <button onclick="getApiKey()">Get API Key from Backend</button>
-  <button onclick="prove()">Prove 'alice'</button>
+  <button onclick="prove()">Test /prove</button>
 
   <h4>Debug Log:</h4>
   <div id="debug">Waiting for action...</div>
 
   <script>
     const API_URL = 'https://basin-zig-production.up.railway.app';
-    const RETURN_URL = window.location.href; // where paddle sends user back after payment
+    let API_KEY = localStorage.getItem('basin_api_key') || '';
+
+    const PRICE_IDS = {
+      pro_monthly: 'pri_01kys708vdfs6wfchamrmvvv4p',
+      pro_annually: 'pri_01kys74gy5hf3jtva5rx5a8cq8',
+      team_monthly: 'pri_01kys7jtht7krtqzcnssrm1e77',
+      team_annually: 'pri_01kys7n660nytwbctwfscfrk6d',
+      unlimited_monthly: 'pri_01kysh67sepm5cwf4j7nm1cwb3',
+      unlimited_annually: 'pri_01kyshnknky8d6zqkgrrbz04hj'
+    };
 
     function log(msg) {
       const el = document.getElementById('debug');
@@ -54,31 +78,11 @@
       el.scrollTop = el.scrollHeight;
     }
 
-    // NEW: Create checkout session via backend
-    async function createCheckout(priceId) {
-      log('Creating checkout session for: ' + priceId);
-      try {
-        const res = await fetch(API_URL + '/create-checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            priceId: priceId,
-            email: document.getElementById('email').value,
-            user_id: document.getElementById('userId').value,
-            return_url: RETURN_URL + '?success=true'
-          })
-        });
-        const data = await res.json();
-        log('Got URL: ' + data.url);
-        if(data.url) {
-          window.open(data.url, '_blank'); // opens paddle
-        } else {
-          log('Error: ' + JSON.stringify(data));
-        }
-      } catch(e) { log('Error: ' + e) }
+    function enableButtons() {
+      document.querySelectorAll('.button').forEach(b => b.classList.remove('disabled'));
     }
 
-    // YOUR EXISTING BACKEND CALLS - KEPT
+    // 1. GET API KEY
     async function getApiKey() {
       log('Calling /apikey...');
       try {
@@ -91,30 +95,62 @@
           })
         });
         const data = await res.json();
-        log('API Response: ' + JSON.stringify(data, null, 2));
+        API_KEY = data.apiKey;
+        localStorage.setItem('basin_api_key', API_KEY);
+        document.getElementById('apiKeyDisplay').innerText = 'API Key: ' + API_KEY;
+        log('API Key Saved: ' + API_KEY);
+        enableButtons();
       } catch(e) { log('Error: ' + e) }
     }
 
+    // 2. CREATE CHECKOUT - FIXED
+    async function buyPlan(plan) {
+      if(!API_KEY) return log('Get API Key first!');
+      const priceId = PRICE_IDS[plan];
+      log('Creating checkout for: ' + plan + ' - ' + priceId);
+      try {
+        const res = await fetch(API_URL + '/create-checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY // REQUIRED BY YOUR BACKEND
+          },
+          body: JSON.stringify({
+            price_id: priceId // Must be price_id not priceId
+          })
+        });
+        const data = await res.json();
+        log('Response: ' + JSON.stringify(data));
+        if(data.url) {
+          window.location.href = data.url; // redirect to paddle
+        } else {
+          log('Error: ' + data.error);
+        }
+      } catch(e) { log('Error: ' + e) }
+    }
+
+    // 3. TEST PROVE
     async function prove() {
+      if(!API_KEY) return log('Get API Key first!');
       log('Calling /prove...');
       try {
         const res = await fetch(API_URL + '/prove', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: document.getElementById('userId').value,
-            email: document.getElementById('email').value
-          })
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': API_KEY
+          },
+          body: JSON.stringify({ item: 'alice' })
         });
         const data = await res.json();
         log('Prove Response: ' + JSON.stringify(data, null, 2));
       } catch(e) { log('Error: ' + e) }
     }
 
-    // Check if we came back from payment
-    const urlParams = new URLSearchParams(window.location.search);
-    if(urlParams.get('success')) {
-      log('SUCCESS: Payment completed!');
+    // Auto load API key if in storage
+    if(API_KEY) {
+      document.getElementById('apiKeyDisplay').innerText = 'API Key: ' + API_KEY;
+      enableButtons();
     }
   </script>
 </body>
