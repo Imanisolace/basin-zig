@@ -77,7 +77,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-  ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+ ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -142,20 +142,39 @@ async function checkLimit(req, res, next, type) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// CREATE CHECKOUT - FIXED FOR LIVE
+// CREATE CHECKOUT - FIXED FOR PADDLE LIVE
 app.post('/create-checkout', auth, async (req, res) => {
   try {
-    const { price_id } = req.body; // MUST BE LIVE price_id like 'pri_01...'
-    const { id: user_id, email, tier } = req.user;
+    const { price_id } = req.body;
+    const { id: user_id, email, tier, paddle_customer_id } = req.user;
 
     if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
 
-    // CHANGE 1: Use LIVE API URL
     const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
-     ? 'https://api.paddle.com/transactions'
-      : 'https://sandbox-api.paddle.com/transactions';
+     ? 'https://api.paddle.com'
+      : 'https://sandbox-api.paddle.com';
 
-    const response = await fetch(PADDLE_API_URL, {
+    // STEP 1: Create Customer in Paddle if we don't have one
+    let customerId = paddle_customer_id;
+    if (!customerId) {
+      const customerRes = await fetch(`${PADDLE_API_URL}/customers`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${PADDLE_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+      const customerData = await customerRes.json();
+      if (!customerRes.ok) return res.status(customerRes.status).json(customerData);
+
+      customerId = customerData.data.id;
+      await db.query('UPDATE api_keys SET paddle_customer_id=$1 WHERE id=$2', [customerId, req.user.id]);
+      console.log(`Created Paddle customer ${customerId} for ${email}`);
+    }
+
+    // STEP 2: Create Transaction with customer_id
+    const response = await fetch(`${PADDLE_API_URL}/transactions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${PADDLE_API_KEY}`,
@@ -163,9 +182,12 @@ app.post('/create-checkout', auth, async (req, res) => {
       },
       body: JSON.stringify({
         items: [{ price_id, quantity: 1 }],
-        customer_email: email,
-        custom_data: { user_id, tier: 'pro', billing: price_id.includes('year')? 'yearly' : 'monthly' },
-        // CHANGE 2: Use your real domain
+        customer_id: customerId,
+        custom_data: {
+          user_id: String(user_id),
+          tier: 'pro',
+          billing: price_id.includes('year')? 'yearly' : 'monthly'
+        },
         return_url: `https://${YOUR_DOMAIN}/welcome`
       })
     });
