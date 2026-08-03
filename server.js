@@ -9,7 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // Add to Railway
+const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // pdl_live_... for production
+const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app'; // Add this var in Railway
 
 // Manual CORS
 app.use((req, res, next) => {
@@ -76,7 +77,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+  ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -141,15 +142,20 @@ async function checkLimit(req, res, next, type) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// CREATE CHECKOUT - NEW ENDPOINT FOR FRONTEND
+// CREATE CHECKOUT - FIXED FOR LIVE
 app.post('/create-checkout', auth, async (req, res) => {
   try {
-    const { price_id } = req.body; // 'pri_01kyvnr0j567m2ns57cy0x58vw'
+    const { price_id } = req.body; // MUST BE LIVE price_id like 'pri_01...'
     const { id: user_id, email, tier } = req.user;
 
     if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
 
-    const response = await fetch('https://sandbox-api.paddle.com/transactions', {
+    // CHANGE 1: Use LIVE API URL
+    const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
+     ? 'https://api.paddle.com/transactions'
+      : 'https://sandbox-api.paddle.com/transactions';
+
+    const response = await fetch(PADDLE_API_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${PADDLE_API_KEY}`,
@@ -159,7 +165,8 @@ app.post('/create-checkout', auth, async (req, res) => {
         items: [{ price_id, quantity: 1 }],
         customer_email: email,
         custom_data: { user_id, tier: 'pro', billing: price_id.includes('year')? 'yearly' : 'monthly' },
-        return_url: `https://your-railway-url.up.railway.app/welcome`
+        // CHANGE 2: Use your real domain
+        return_url: `https://${YOUR_DOMAIN}/welcome`
       })
     });
 
@@ -227,7 +234,7 @@ app.get('/usage', auth, autoReset, (req, res) => {
   });
 });
 
-// PADDLE WEBHOOK - FIXED
+// PADDLE WEBHOOK - WORKS FOR BOTH SANDBOX + LIVE
 app.post('/webhooks/paddle', async (req, res) => {
   try {
     const signature = req.headers['paddle-signature'];
@@ -245,8 +252,6 @@ app.post('/webhooks/paddle', async (req, res) => {
     const event = JSON.parse(req.body.toString());
     console.log('Paddle Event:', event.event_type);
     const data = event.data;
-
-    // KEY FIX: custom_data is inside data
     const customData = data.custom_data;
 
     if (event.event_type === 'transaction.completed' && data.status === 'completed') {
