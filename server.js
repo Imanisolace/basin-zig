@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // pdl_live_... for production
-const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app'; // Add this var in Railway
+const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app';
 
 // Manual CORS
 app.use((req, res, next) => {
@@ -40,7 +40,7 @@ app.use((req, res, next) => {
   }
 });
 
-// MERKLE TREE - KEEP YOURS
+// MERKLE TREE
 class MerkleTree {
   constructor(leaves) {
     this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
@@ -77,7 +77,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
- ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -142,7 +142,7 @@ async function checkLimit(req, res, next, type) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// CREATE CHECKOUT - FIXED FOR PADDLE LIVE
+// CREATE CHECKOUT - FINAL FIX FOR PADDLE LIVE
 app.post('/create-checkout', auth, async (req, res) => {
   try {
     const { price_id } = req.body;
@@ -153,6 +153,8 @@ app.post('/create-checkout', auth, async (req, res) => {
     const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
      ? 'https://api.paddle.com'
       : 'https://sandbox-api.paddle.com';
+
+    console.log('Creating checkout for:', { price_id, email, user_id });
 
     // STEP 1: Create Customer in Paddle if we don't have one
     let customerId = paddle_customer_id;
@@ -166,33 +168,42 @@ app.post('/create-checkout', auth, async (req, res) => {
         body: JSON.stringify({ email })
       });
       const customerData = await customerRes.json();
-      if (!customerRes.ok) return res.status(customerRes.status).json(customerData);
-
+      if (!customerRes.ok) {
+        console.error('Paddle Customer Error:', customerData);
+        return res.status(customerRes.status).json(customerData);
+      }
       customerId = customerData.data.id;
       await db.query('UPDATE api_keys SET paddle_customer_id=$1 WHERE id=$2', [customerId, req.user.id]);
-      console.log(`Created Paddle customer ${customerId} for ${email}`);
+      console.log(`Created Paddle customer ${customerId}`);
     }
 
-    // STEP 2: Create Transaction with customer_id
+    // STEP 2: Create Transaction
+    const payload = {
+      items: [{ price_id, quantity: 1 }],
+      customer_id: customerId,
+      customer_email: email, // REQUIRED BY PADDLE LIVE
+      custom_data: {
+        user_id: String(user_id),
+        tier: 'pro',
+        billing: price_id.includes('year')? 'yearly' : 'monthly'
+      },
+      return_url: `https://${YOUR_DOMAIN}/welcome`
+    };
+
+    console.log('Paddle payload:', JSON.stringify(payload));
+
     const response = await fetch(`${PADDLE_API_URL}/transactions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${PADDLE_API_KEY}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        items: [{ price_id, quantity: 1 }],
-        customer_id: customerId,
-        custom_data: {
-          user_id: String(user_id),
-          tier: 'pro',
-          billing: price_id.includes('year')? 'yearly' : 'monthly'
-        },
-        return_url: `https://${YOUR_DOMAIN}/welcome`
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
+    console.log('Paddle Response:', response.status, data);
+
     if (!response.ok) return res.status(response.status).json(data);
 
     res.json({ url: data.data.checkout.url });
@@ -256,7 +267,7 @@ app.get('/usage', auth, autoReset, (req, res) => {
   });
 });
 
-// PADDLE WEBHOOK - WORKS FOR BOTH SANDBOX + LIVE
+// PADDLE WEBHOOK
 app.post('/webhooks/paddle', async (req, res) => {
   try {
     const signature = req.headers['paddle-signature'];
@@ -286,7 +297,7 @@ app.post('/webhooks/paddle', async (req, res) => {
       }
     }
 
-    if (event.event_type === 'subscription.active') { // Handles renewals
+    if (event.event_type === 'subscription.active') {
         if (customData?.user_id) {
             await db.query(`UPDATE api_keys SET tier='pro' WHERE user_id=$1`, [customData.user_id]);
         }
