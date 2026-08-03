@@ -10,12 +10,7 @@ const PORT = process.env.PORT || 3000; // Railway will override this to 8080
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PADDLE_API_KEY = process.env.PADDLE_API_KEY; // pdl_live_... for production
-const PADDLE_CLIENT_TOKEN = process.env.PADDLE_CLIENT_TOKEN; // test_... or live_...
 const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'your-railway-url.up.railway.app';
-
-// DEBUG LOGS
-console.log("PADDLE API KEY LOADED:", PADDLE_API_KEY? PADDLE_API_KEY.substring(0,8) + "..." : "MISSING");
-console.log("PADDLE CLIENT TOKEN LOADED:", PADDLE_CLIENT_TOKEN? PADDLE_CLIENT_TOKEN.substring(0,8) + "..." : "MISSING");
 
 // Manual CORS
 app.use((req, res, next) => {
@@ -82,7 +77,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -147,7 +142,7 @@ async function checkLimit(req, res, next, type) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// CREATE CHECKOUT - FINAL FIX FOR PADDLE LIVE
+// CREATE CHECKOUT - PADDLE LIVE
 app.post('/create-checkout', auth, async (req, res) => {
   try {
     const { price_id } = req.body;
@@ -156,7 +151,7 @@ app.post('/create-checkout', auth, async (req, res) => {
     if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
 
     const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')
-    ? 'https://api.paddle.com'
+   ? 'https://api.paddle.com'
       : 'https://sandbox-api.paddle.com';
 
     console.log('Creating checkout for:', { price_id, email, user_id });
@@ -195,8 +190,6 @@ app.post('/create-checkout', auth, async (req, res) => {
       return_url: `https://${YOUR_DOMAIN}/welcome`
     };
 
-    console.log('Paddle payload:', JSON.stringify(payload));
-
     const response = await fetch(`${PADDLE_API_URL}/transactions`, {
       method: 'POST',
       headers: {
@@ -207,9 +200,11 @@ app.post('/create-checkout', auth, async (req, res) => {
     });
 
     const data = await response.json();
-    console.log('Paddle Response:', response.status, data);
 
-    if (!response.ok) return res.status(response.status).json(data);
+    if (!response.ok) {
+      console.error('Paddle Response:', response.status, data);
+      return res.status(response.status).json(data);
+    }
 
     res.json({ url: data.data.checkout.url });
   } catch (e) {
