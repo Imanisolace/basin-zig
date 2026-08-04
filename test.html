@@ -82,7 +82,6 @@
       document.querySelectorAll('.button').forEach(b => b.classList.remove('disabled'));
     }
 
-    // 1. GET API KEY
     async function getApiKey() {
       log('Calling /apikey...');
       try {
@@ -94,16 +93,16 @@
             email: document.getElementById('email').value
           })
         });
+        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         API_KEY = data.apiKey;
         localStorage.setItem('basin_api_key', API_KEY);
         document.getElementById('apiKeyDisplay').innerText = 'API Key: ' + API_KEY;
         log('API Key Saved: ' + API_KEY);
         enableButtons();
-      } catch(e) { log('Error: ' + e) }
+      } catch(e) { log('Error: ' + e.message) }
     }
 
-    // 2. CREATE CHECKOUT - FIXED
     async function buyPlan(plan) {
       if(!API_KEY) return log('Get API Key first!');
       const priceId = PRICE_IDS[plan];
@@ -113,23 +112,21 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': API_KEY // REQUIRED BY YOUR BACKEND
+            'x-api-key': API_KEY
           },
-          body: JSON.stringify({
-            price_id: priceId // Must be price_id not priceId
-          })
+          body: JSON.stringify({ price_id: priceId })
         });
+        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         log('Response: ' + JSON.stringify(data));
         if(data.url) {
-          window.location.href = data.url; // redirect to paddle
+          window.location.href = data.url;
         } else {
-          log('Error: ' + data.error);
+          log('Error: ' + JSON.stringify(data.error));
         }
-      } catch(e) { log('Error: ' + e) }
+      } catch(e) { log('Error: ' + e.message) }
     }
 
-    // 3. TEST PROVE
     async function prove() {
       if(!API_KEY) return log('Get API Key first!');
       log('Calling /prove...');
@@ -142,12 +139,12 @@
           },
           body: JSON.stringify({ item: 'alice' })
         });
+        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         log('Prove Response: ' + JSON.stringify(data, null, 2));
-      } catch(e) { log('Error: ' + e) }
+      } catch(e) { log('Error: ' + e.message) }
     }
 
-    // Auto load API key if in storage
     if(API_KEY) {
       document.getElementById('apiKeyDisplay').innerText = 'API Key: ' + API_KEY;
       enableButtons();
