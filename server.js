@@ -21,7 +21,25 @@ app.use((req, res, next) => {
   next();
 });
 
-// SERVE TEST PAGE
+// SERVE STATIC FILES
+app.use(express.static('public'));
+
+// ==================== WEBSITE PAGES FOR PADDLE ====================
+// All 4 routes serve the same index.html. JS inside will show the right section
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+app.get('/refund', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// EXISTING PAGES
 app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, 'test.html'));
 });
@@ -78,7 +96,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
