@@ -10,10 +10,11 @@
     button:hover { background: #4a2ad4; }
     a.button { background: #10b981; color: white; border: none; cursor: pointer; font-weight: 600; }
     a.button:hover { background: #059669; }
-   .card { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; background: white; }
+  .card { border: 1px solid #ddd; padding: 20px; margin: 15px 0; border-radius: 8px; background: white; }
     #debug { background: #1e1e1e; color: #00ff00; padding: 15px; margin-top: 20px; font-family: monospace; font-size: 12px; white-space: pre-wrap; border-radius: 6px; min-height: 100px; }
     h1 { color: #5f36ff; }
-   .disabled { opacity: 0.5; pointer-events: none; }
+  .disabled { opacity: 0.5; pointer-events: none; }
+  .price-id { font-size: 12px; color: #666; }
   </style>
 </head>
 <body>
@@ -30,27 +31,39 @@
   <p id="apiKeyDisplay"></p>
 
   <div class="card">
-    <h3>Pro Yearly - $90/year</h3>
-    <p>Price ID: pri_01kys74gy5hf3jtva5rx5a8cq8</p>
-    <a class="button disabled" id="buyYearly" onclick="buyPlan('pro_annually')">Buy Yearly</a>
-  </div>
-
-  <div class="card">
-    <h3>Pro Monthly - $9/month</h3>
-    <p>Price ID: pri_01kys708vdfs6wfchamrmvvv4p</p>
+    <h3>Pro Monthly - $29/month</h3>
+    <p class="price-id">Price ID: pri_01kys708vdfs6wfchamrmvvv4p</p>
     <a class="button disabled" id="buyMonthly" onclick="buyPlan('pro_monthly')">Buy Monthly</a>
   </div>
 
   <div class="card">
-    <h3>Team Monthly - $99/month</h3>
-    <p>Price ID: pri_01kys7jtht7krtqzcnssrm1e77</p>
+    <h3>Pro Yearly - $290/year</h3>
+    <p class="price-id">Price ID: pri_01kys74gy5hf3jtva5rx5a8cq8</p>
+    <a class="button disabled" id="buyYearly" onclick="buyPlan('pro_annually')">Buy Yearly</a>
+  </div>
+
+  <div class="card">
+    <h3>Team Monthly - $149/month</h3>
+    <p class="price-id">Price ID: pri_01kys7jtht7krtqzcnssrm1e77</p>
     <a class="button disabled" id="buyTeamM" onclick="buyPlan('team_monthly')">Buy Team Monthly</a>
   </div>
 
   <div class="card">
-    <h3>Unlimited Monthly - $499/month</h3>
-    <p>Price ID: pri_01kysh67sepm5cwf4j7nm1cwb3</p>
-    <a class="button disabled" id="buyUnlimitedM" onclick="buyPlan('unlimited_monthly')">Buy Unlimited</a>
+    <h3>Team Yearly - $1,470/year</h3>
+    <p class="price-id">Price ID: pri_01kys7n660nytwbctwfscfrk6d</p>
+    <a class="button disabled" id="buyTeamY" onclick="buyPlan('team_annually')">Buy Team Yearly</a>
+  </div>
+
+  <div class="card">
+    <h3>Unlimited Monthly - $799/month</h3>
+    <p class="price-id">Price ID: pri_01kysh67sepm5cwf4j7nm1cwb3</p>
+    <a class="button disabled" id="buyUnlimitedM" onclick="buyPlan('unlimited_monthly')">Buy Unlimited Monthly</a>
+  </div>
+
+  <div class="card">
+    <h3>Unlimited Yearly - $7,950/year</h3>
+    <p class="price-id">Price ID: pri_01kyshnknky8d6zqkgrrbz04hj</p>
+    <a class="button disabled" id="buyUnlimitedY" onclick="buyPlan('unlimited_annually')">Buy Unlimited Yearly</a>
   </div>
 
   <hr>
