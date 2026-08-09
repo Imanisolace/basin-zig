@@ -131,8 +131,8 @@ async function auth(req, res, next) {
 
   req.user = result.rows[0];
 
-  // Auto downgrade if expired
-  if (req.user.expires_at && new Date() > new Date(req.user.expires_at)) {
+  // FIXED: Auto downgrade if expired - use >= and check properly
+  if (req.user.expires_at && new Date() >= new Date(req.user.expires_at)) {
     await db.query(`UPDATE api_keys SET tier='free', billing=NULL, expires_at=NULL WHERE id=$1`, [req.user.id]);
     req.user.tier = 'free';
     req.user.billing = null;
@@ -274,14 +274,17 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
       return res.status(400).send('Unknown iid');
     }
 
-    // 3. Upgrade user in DB
-    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    // 3. FIXED: Upgrade user in DB - set to end of day UTC
+    const expiresAt = new Date();
+    expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
+    expiresAt.setUTCHours(23, 59, 59, 999);
+
     await db.query(
       `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
       [billing, expiresAt, email]
     );
 
-    console.log(`NP: Activated ${email} to pro ${billing} until ${expiresAt}`);
+    console.log(`NP: Activated ${email} to pro ${billing} until ${expiresAt.toISOString()}`);
     res.status(200).send('OK');
 
   } catch (e) {
@@ -297,13 +300,17 @@ app.get('/dev/upgrade', async (req, res) => {
 
   const days = plan === 'yearly'? 365 : 30;
   const billing = plan === 'yearly'? 'yearly' : 'monthly';
-  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  
+  // FIXED: Set to end of day UTC
+  const expiresAt = new Date();
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
+  expiresAt.setUTCHours(23, 59, 59, 999);
 
   await db.query(
     `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
     [billing, expiresAt, email]
   );
-  res.send(`Upgraded ${email} to pro ${billing} until ${expiresAt.toDateString()}. Go to /dashboard`);
+  res.send(`Upgraded ${email} to pro ${billing} until ${expiresAt.toISOString()}. Go to /dashboard`);
 });
 // =======================================================================
 
