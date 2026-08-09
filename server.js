@@ -9,10 +9,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'basin-zig-production.up.railway.app';
 const NP_IPN_SECRET = "CYiUIAEpuQDX1RrK2El7Vtwwb02hLCmi"; // NowPayments secret
 
-// Manual CORS - must be first
+// Manual CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-api-key');
@@ -21,40 +20,20 @@ app.use((req, res, next) => {
   next();
 });
 
-// SERVE STATIC FILES
+// SERVE STATIC
 app.use(express.static('public'));
 
-// ==================== WEBSITE PAGES ====================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/dashboard', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/terms', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/privacy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-app.get('/refund', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+// PAGES
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/refund', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/welcome', (req, res) => res.send('<h1>Payment Successful!</h1><p>Your API key is now upgraded. Refresh dashboard.</p><a href="/dashboard">Go to Dashboard</a>'));
 
-// EXISTING PAGES
-app.get('/test', (req, res) => {
-  res.sendFile(path.join(__dirname, 'test.html'));
-});
-
-// WELCOME PAGE FOR NOWPAYMENTS REDIRECT
-app.get('/welcome', (req, res) => {
-  res.send('<h1>Payment Successful!</h1><p>Your API key is now upgraded. Refresh dashboard.</p><a href="/dashboard">Go to Dashboard</a>');
-});
-
-// JSON for everything except webhooks
 app.use(express.json());
 
-// MERKLE TREE
+// MERKLE
 class MerkleTree {
   constructor(leaves) {
     this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
@@ -92,27 +71,27 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-  ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
 }
 
+// CHANGED: PRO IS NOW UNLIMITED
 const LIMITS = {
   free: { prove: 1000, verify: 5000 },
-  pro: { prove: 50000, verify: 200000 },
-  team: { prove: 500000, verify: 2000000 },
+  pro: { prove: Infinity, verify: Infinity }, // UNLIMITED
+  team: { prove: Infinity, verify: Infinity }, // UNLIMITED
   unlimited: { prove: Infinity, verify: Infinity }
 };
 
 const RATE_LIMITS = {
   free: { windowMs: 60 * 1000, max: 10 },
-  pro: { windowMs: 60 * 1000, max: 100 },
-  team: { windowMs: 60 * 1000, max: 1000 },
+  pro: { windowMs: 60 * 1000, max: 1000 }, // Higher for pro
+  team: { windowMs: 60 * 1000, max: 5000 },
   unlimited: { windowMs: 60 * 1000, max: 10000 }
 };
 
-// Create limiters once at startup
 const limiters = {};
 for (const tier in RATE_LIMITS) {
   limiters[tier] = rateLimit({
@@ -128,17 +107,12 @@ async function auth(req, res, next) {
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
   const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]);
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid x-api-key' });
-
   req.user = result.rows[0];
 
-  // FIXED: Auto downgrade if expired - use >= and check properly
   if (req.user.expires_at && new Date() >= new Date(req.user.expires_at)) {
     await db.query(`UPDATE api_keys SET tier='free', billing=NULL, expires_at=NULL WHERE id=$1`, [req.user.id]);
     req.user.tier = 'free';
-    req.user.billing = null;
-    req.user.expires_at = null;
   }
-
   next();
 }
 
@@ -162,34 +136,26 @@ const dynamicRateLimit = (req, res, next) => {
 async function checkLimit(req, res, next, type) {
   const tier = req.user.tier || 'free';
   const limit = LIMITS[tier][type];
+  if (limit === Infinity) return next(); // Skip check for unlimited
   const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
   if (used >= limit) return res.status(429).json({ error: `Monthly limit reached for ${tier} tier. Upgrade at /pricing` });
   next();
 }
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'Basin ZK API', ts: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'Basin ZK API' }));
 
 app.post('/apikey', async (req, res) => {
   try {
     const { email, user_id } = req.body;
     if (!email ||!user_id) return res.status(400).json({ error: 'email and user_id required' });
-
-    // Check if user already has a key - prevent duplicates
     const existing = await db.query('SELECT * FROM api_keys WHERE email = $1', [email]);
     if (existing.rows.length > 0) {
-      return res.json({
-        apiKey: existing.rows[0].api_key,
-        tier: existing.rows[0].tier,
-        billing: existing.rows[0].billing,
-        limits: LIMITS[existing.rows[0].tier]
-      });
+      return res.json({ apiKey: existing.rows[0].api_key, tier: existing.rows[0].tier, billing: existing.rows[0].billing, limits: LIMITS[existing.rows[0].tier] });
     }
-
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
     await db.query('INSERT INTO api_keys(email, api_key, user_id) VALUES($1, $2, $3)', [email, apiKey, user_id]);
     res.json({ apiKey, tier: 'free', billing: null, limits: LIMITS.free });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -207,7 +173,6 @@ app.post('/prove', auth, autoReset, dynamicRateLimit, async (req, res, next) => 
     await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]);
     res.json({ root, proof, target_index: index, valid: true });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -219,7 +184,6 @@ app.post('/verify', auth, autoReset, dynamicRateLimit, async (req, res, next) =>
     await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]);
     res.json({ valid });
   } catch (e) {
-    console.error(e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -237,29 +201,27 @@ app.get('/usage', auth, autoReset, (req, res) => {
   });
 });
 
-// ==================== NOWPAYMENTS WEBHOOK ====================
+// NOWPAYMENTS WEBHOOK
 app.post('/webhook/nowpayments', express.json(), async (req, res) => {
   try {
     const data = req.body;
     const signature = req.headers['x-nowpayments-sig'];
 
-    // 1. Verify signature - COMMENTED OUT FOR TESTING
     const sign = crypto.createHmac('sha512', NP_IPN_SECRET)
-                  .update(JSON.stringify(data))
-                  .digest('hex');
+                 .update(JSON.stringify(data))
+                 .digest('hex');
 
-    // if (signature!== sign) {
-    // console.error("Invalid NowPayments signature");
-    // return res.status(400).send('Invalid signature');
-    // }
+    if (signature!== sign) { // ENABLED FOR PROD
+      console.error("Invalid NowPayments signature");
+      return res.status(400).send('Invalid signature');
+    }
 
-    // 2. Only activate on finished payments
     if (data.payment_status!== 'finished') {
       return res.status(200).send('Not finished yet');
     }
 
-    const iid = data.payment_id; // 4900460102 or 4328033905
-    const email = data.order_description; // email we sent
+    const iid = data.payment_id; 
+    const email = data.order_description;
 
     let billing = 'monthly';
     let days = 30;
@@ -274,7 +236,6 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
       return res.status(400).send('Unknown iid');
     }
 
-    // 3. FIXED: Upgrade user in DB - set to end of day UTC
     const expiresAt = new Date();
     expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
     expiresAt.setUTCHours(23, 59, 59, 999);
@@ -283,35 +244,11 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
       `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
       [billing, expiresAt, email]
     );
-
-    console.log(`NP: Activated ${email} to pro ${billing} until ${expiresAt.toISOString()}`);
     res.status(200).send('OK');
-
   } catch (e) {
     console.error('NowPayments webhook error:', e);
     res.status(500).send('Server error');
   }
 });
-
-// ==================== DEV ONLY - REMOVE BEFORE LAUNCH ====================
-app.get('/dev/upgrade', async (req, res) => {
-  const { email, plan } = req.query;
-  if (!email) return res.status(400).send('?email=required&plan=monthly|yearly');
-
-  const days = plan === 'yearly'? 365 : 30;
-  const billing = plan === 'yearly'? 'yearly' : 'monthly';
-  
-  // FIXED: Set to end of day UTC
-  const expiresAt = new Date();
-  expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
-  expiresAt.setUTCHours(23, 59, 59, 999);
-
-  await db.query(
-    `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
-    [billing, expiresAt, email]
-  );
-  res.send(`Upgraded ${email} to pro ${billing} until ${expiresAt.toISOString()}. Go to /dashboard`);
-});
-// =======================================================================
 
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
