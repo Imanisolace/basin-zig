@@ -26,6 +26,7 @@
    .btn { background: #111; color: white; padding: 12px 18px; border-radius: 6px; text-align: center; margin-top: 10px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; }
    .btn:disabled { background: #ccc; cursor: not-allowed; }
    .dashboard-box { background: #f8f8f8; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #eee; }
+   code { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -46,12 +47,13 @@
     <h2>AI Backend API for Developers</h2>
     <h3>Pricing</h3>
     <div class="pricing-grid">
-      <div class="plan"><h3>Free</h3><p class="price">$0</p><p>1,000 prove / month</p></div>
+      <div class="plan"><h3>Free</h3><p class="price">$0</p><p>1,000 prove / month</p><p>5,000 verify / month</p></div>
       <div class="plan highlight">
         <h3>Pro</h3>
         <p class="price">$28/mo</p>
         <p>or <b>$260/yr</b> <span class="badge">Save 23%</span></p>
-        <p><b>Unlimited</b> prove</p>
+        <p><b>50,000</b> prove / month</p>
+        <p><b>200,000</b> verify / month</p>
         <button id="btn-monthly" class="btn">Buy Monthly $28</button>
         <button id="btn-yearly" class="btn">Buy Annual $260</button>
         <p id="login-msg">Login to purchase</p>
@@ -60,24 +62,43 @@
   </div>
 
   <div id="dashboard" class="page"><h2>Dashboard</h2><div id="dashboard-content"><p>Loading...</p></div></div>
-  <div id="terms" class="page"><h2>Terms</h2></div>
-  <div id="privacy" class="page"><h2>Privacy</h2></div>
-  <div id="refund" class="page"><h2>Refund</h2></div>
+  <div id="terms" class="page"><h2>Terms</h2><p>Standard SaaS terms.</p></div>
+  <div id="privacy" class="page"><h2>Privacy</h2><p>We don't store your data. Only usage metrics.</p></div>
+  <div id="refund" class="page"><h2>Refund</h2><p>7 day refund policy.</p></div>
 
   <footer>Contact: support@basin.ai | © 2026 Basin</footer>
 
   <script>
+    const API_URL = window.location.origin; // works on localhost and railway
+
+    async function getOrCreateApiKey(email, userId) {
+      let apiKey = localStorage.getItem('basin_api_key');
+      if (apiKey) return apiKey;
+
+      // Call backend to create key
+      const res = await fetch(API_URL + '/apikey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, user_id: userId })
+      });
+      const data = await res.json();
+      if (data.apiKey) {
+        localStorage.setItem('basin_api_key', data.apiKey);
+        return data.apiKey;
+      }
+      throw new Error("Failed to create API key");
+    }
+
     function initClerk() {
       if (!window.Clerk) {
-        console.log("Waiting for Clerk...");
         setTimeout(initClerk, 200);
         return;
       }
 
-      Clerk.load().then(() => {
+      Clerk.load().then(async () => {
         console.log("Clerk loaded!", Clerk.user);
 
-        function updateUI() {
+        async function updateUI() {
           const userBtnDiv = document.getElementById('user-button');
           const btnMonthly = document.getElementById('btn-monthly');
           const btnYearly = document.getElementById('btn-yearly');
@@ -89,12 +110,17 @@
             if(btnMonthly) btnMonthly.disabled = false;
             if(btnYearly) btnYearly.disabled = false;
             if(loginMsg) loginMsg.style.display = 'none';
+            
+            // Auto create API key on login
+            const email = Clerk.user.primaryEmailAddress.emailAddress;
+            const userId = Clerk.user.id;
+            try {
+              await getOrCreateApiKey(email, userId);
+            } catch(e) { console.error(e) }
+
           } else {
             userBtnDiv.innerHTML = '<button class="btn" id="login-btn">Login</button>';
-            document.getElementById('login-btn').onclick = () => {
-              console.log("Opening signin...");
-              Clerk.openSignIn();
-            };
+            document.getElementById('login-btn').onclick = () => Clerk.openSignIn();
             if(btnMonthly) btnMonthly.disabled = true;
             if(btnYearly) btnYearly.disabled = true;
             if(loginMsg) loginMsg.style.display = 'block';
@@ -115,7 +141,32 @@
             document.getElementById('login-btn-dash').onclick = () => Clerk.openSignIn();
           } else {
             const email = Clerk.user.primaryEmailAddress.emailAddress;
-            dashContent.innerHTML = `<div class="dashboard-box"><h3>Welcome, ${email}</h3><p><b>Plan:</b> Free</p></div>`;
+            const apiKey = localStorage.getItem('basin_api_key');
+            
+            dashContent.innerHTML = `<div class="dashboard-box"><h3>Welcome, ${email}</h3><p>Loading usage...</p></div>`;
+
+            // Fetch real usage from backend
+            fetch(API_URL + '/usage', {
+              headers: { 'x-api-key': apiKey }
+            })
+            .then(res => res.json())
+            .then(data => {
+              dashContent.innerHTML = `
+                <div class="dashboard-box">
+                  <h3>Welcome, ${email}</h3>
+                  <p><b>Plan:</b> ${data.tier} ${data.billing? '(' + data.billing + ')' : ''}</p>
+                  <p><b>API Key:</b> <code>${apiKey}</code></p>
+                  <p><b>Prove:</b> ${data.usage.prove} / ${data.limits.prove === Infinity? '∞' : data.limits.prove}</p>
+                  <p><b>Verify:</b> ${data.usage.verify} / ${data.limits.verify === Infinity? '∞' : data.limits.verify}</p>
+                  <p><b>Rate Limit:</b> ${data.rate_limit.max} req/min</p>
+                  <p><b>Resets:</b> ${new Date(data.last_reset).toLocaleDateString()}</p>
+                  <p><b>Expires:</b> ${data.expires_at? new Date(data.expires_at).toLocaleDateString() : 'Never'}</p>
+                </div>
+              `;
+            })
+            .catch(err => {
+              dashContent.innerHTML = `<div class="dashboard-box"><p>Error loading usage. ${err.message}</p></div>`;
+            });
           }
         }
 
