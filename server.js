@@ -28,6 +28,9 @@ app.use(express.static('public'));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 app.get('/terms', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -45,7 +48,7 @@ app.get('/test', (req, res) => {
 
 // WELCOME PAGE FOR NOWPAYMENTS REDIRECT
 app.get('/welcome', (req, res) => {
-  res.send('<h1>Payment Successful!</h1><p>Your API key is now upgraded. Check Railway logs.</p><a href="/test">Back to Test</a>');
+  res.send('<h1>Payment Successful!</h1><p>Your API key is now upgraded. Refresh dashboard.</p><a href="/dashboard">Go to Dashboard</a>');
 });
 
 // JSON for everything except webhooks
@@ -89,7 +92,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -230,8 +233,8 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
 
     // 1. Verify signature
     const sign = crypto.createHmac('sha512', NP_IPN_SECRET)
-                     .update(JSON.stringify(data))
-                     .digest('hex');
+                    .update(JSON.stringify(data))
+                    .digest('hex');
 
     if (signature!== sign) {
       console.error("Invalid NowPayments signature");
@@ -243,20 +246,20 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
       return res.status(200).send('Not finished yet');
     }
 
-    const orderId = data.order_id;
-    const email = data.order_description; // email goes here
+    const iid = data.payment_id; // 4900460102 or 4328033905
+    const email = data.order_description; // email we sent
 
     let billing = 'monthly';
     let days = 30;
 
-    if (orderId === 'unlimited_monthly_28') {
+    if (iid === '4900460102') { // Monthly $28
       billing = 'monthly';
       days = 30;
-    } else if (orderId === 'unlimited_yearly_260') {
+    } else if (iid === '4328033905') { // Yearly $260
       billing = 'yearly';
       days = 365;
     } else {
-      return res.status(400).send('Unknown order_id');
+      return res.status(400).send('Unknown iid');
     }
 
     // 3. Upgrade user in DB
