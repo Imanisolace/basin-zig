@@ -8,9 +8,11 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@clerk/express": "^1.2.2",
     "express": "^4.19.2",
     "pg": "^8.11.5",
-    "express-rate-limit": "^7.3.0"
+    "express-rate-limit": "^7.3.0",
+    "dotenv": "^16.4.5"
   },
   "engines": {
     "node": "20.x"
