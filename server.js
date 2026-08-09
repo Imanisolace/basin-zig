@@ -9,8 +9,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PADDLE_API_KEY = process.env.PADDLE_API_KEY?.trim(); // trim removes spaces
 const YOUR_DOMAIN = process.env.RAILWAY_PUBLIC_DOMAIN || 'basin-zig-production.up.railway.app';
+const NP_IPN_SECRET = "CYiUIAEpuQDX1RrK2El7Vtwwb02hLCmi"; // NowPayments secret
 
 // Manual CORS - must be first
 app.use((req, res, next) => {
@@ -24,8 +24,7 @@ app.use((req, res, next) => {
 // SERVE STATIC FILES
 app.use(express.static('public'));
 
-// ==================== WEBSITE PAGES FOR PADDLE ====================
-// All 4 routes serve the same index.html. JS inside will show the right section
+// ==================== WEBSITE PAGES ====================
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -44,19 +43,13 @@ app.get('/test', (req, res) => {
   res.sendFile(path.join(__dirname, 'test.html'));
 });
 
-// WELCOME PAGE FOR PADDLE REDIRECT
+// WELCOME PAGE FOR NOWPAYMENTS REDIRECT
 app.get('/welcome', (req, res) => {
-  res.send('<h1>Payment Successful!</h1><p>Check Railway logs. Your API key is now upgraded.</p><a href="/test">Back to Test</a>');
+  res.send('<h1>Payment Successful!</h1><p>Your API key is now upgraded. Check Railway logs.</p><a href="/test">Back to Test</a>');
 });
 
-// Need raw body for Paddle webhook signature verification
-app.use((req, res, next) => {
-  if (req.path === '/webhooks/paddle') {
-    express.raw({type: 'application/json'})(req, res, next);
-  } else {
-    express.json()(req, res, next);
-  }
-});
+// JSON for everything except webhooks
+app.use(express.json());
 
 // MERKLE TREE
 class MerkleTree {
@@ -96,7 +89,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -116,7 +109,7 @@ const RATE_LIMITS = {
   unlimited: { windowMs: 60 * 1000, max: 10000 }
 };
 
-// FIX: Create limiters once at startup
+// Create limiters once at startup
 const limiters = {};
 for (const tier in RATE_LIMITS) {
   limiters[tier] = rateLimit({
@@ -132,7 +125,17 @@ async function auth(req, res, next) {
   if (!key) return res.status(401).json({ error: 'Missing x-api-key' });
   const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [key]);
   if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid x-api-key' });
+
   req.user = result.rows[0];
+
+  // Auto downgrade if expired
+  if (req.user.expires_at && new Date() > new Date(req.user.expires_at)) {
+    await db.query(`UPDATE api_keys SET tier='free', billing=NULL, expires_at=NULL WHERE id=$1`, [req.user.id]);
+    req.user.tier = 'free';
+    req.user.billing = null;
+    req.user.expires_at = null;
+  }
+
   next();
 }
 
@@ -176,51 +179,6 @@ app.post('/apikey', async (req, res) => {
   }
 });
 
-// CREATE CHECKOUT - PADDLE LIVE
-app.post('/create-checkout', auth, async (req, res) => {
-  try {
-    const { price_id } = req.body;
-    const { id: user_id, email, tier, paddle_customer_id } = req.user;
-    if (tier!== 'free') return res.status(400).json({ error: 'Already on a paid plan' });
-
-    const PADDLE_API_URL = PADDLE_API_KEY.startsWith('pdl_live_')? 'https://api.paddle.com' : 'https://sandbox-api.paddle.com';
-    console.log('Creating checkout for:', { price_id, email, user_id });
-
-    let customerId = paddle_customer_id;
-    if (!customerId) {
-      const customerRes = await fetch(`${PADDLE_API_URL}/customers`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${PADDLE_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const customerData = await customerRes.json();
-      if (!customerRes.ok) {
-        console.error('Paddle Customer Error:', customerData);
-        return res.status(customerRes.status).json(customerData);
-      }
-      customerId = customerData.data.id;
-      await db.query('UPDATE api_keys SET paddle_customer_id=$1 WHERE id=$2', [customerId, req.user.id]);
-    }
-
-    const payload = {
-      items: [{ price_id, quantity: 1 }],
-      customer_id: customerId,
-      customer_email: email,
-      custom_data: { user_id: String(user_id), tier: 'pro', billing: price_id.includes('year')? 'yearly' : 'monthly' },
-      return_url: `https://${YOUR_DOMAIN}/welcome`
-    };
-
-    const response = await fetch(`${PADDLE_API_URL}/transactions`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${PADDLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json();
-    if (!response.ok) { console.error('Paddle Response:', response.status, data); return res.status(response.status).json(data); }
-    res.json({ url: data.data.checkout.url });
-  } catch (e) { console.error('Create checkout error:', e); res.status(500).json({ error: e.message }); }
-});
-
 app.post('/prove', auth, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
   try {
     const { item } = req.body;
@@ -259,51 +217,61 @@ app.get('/usage', auth, autoReset, (req, res) => {
     limits: LIMITS[tier],
     rate_limit: RATE_LIMITS[tier],
     usage: { prove: req.user.prove_usage, verify: req.user.verify_usage },
-    last_reset: req.user.last_reset
+    last_reset: req.user.last_reset,
+    expires_at: req.user.expires_at
   });
 });
 
-// PADDLE WEBHOOK
-app.post('/webhooks/paddle', async (req, res) => {
+// ==================== NOWPAYMENTS WEBHOOK ====================
+app.post('/webhook/nowpayments', express.json(), async (req, res) => {
   try {
-    const signature = req.headers['paddle-signature'];
-    const secret = process.env.PADDLE_WEBHOOK_SECRET;
-    if (!signature ||!secret) return res.status(400).send('Missing signature or secret');
+    const data = req.body;
+    const signature = req.headers['x-nowpayments-sig'];
 
-    const [ts, h1] = signature.split(';').map(s => s.split('=')[1]);
-    const signedPayload = `${ts}:${req.body.toString()}`;
-    const expectedSignature = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');
-    if (h1!== expectedSignature) {
-      console.error('Invalid Paddle signature');
-      return res.status(401).send('Invalid signature');
+    // 1. Verify signature
+    const sign = crypto.createHmac('sha512', NP_IPN_SECRET)
+                     .update(JSON.stringify(data))
+                     .digest('hex');
+
+    if (signature!== sign) {
+      console.error("Invalid NowPayments signature");
+      return res.status(400).send('Invalid signature');
     }
 
-    const event = JSON.parse(req.body.toString());
-    console.log('Paddle Event:', event.event_type);
-    const data = event.data;
-    const customData = data.custom_data;
-
-    if (event.event_type === 'transaction.completed' && data.status === 'completed') {
-      if (customData?.user_id) {
-        await db.query(
-          `UPDATE api_keys SET tier=$1, billing=$2, paddle_subscription_id=$3 WHERE user_id=$4`,
-          [customData.tier, customData.billing, data.subscription_id, customData.user_id]
-        );
-        console.log(`Upgraded ${customData.user_id} to ${customData.tier} ${customData.billing}`);
-      }
+    // 2. Only activate on finished payments
+    if (data.payment_status!== 'finished') {
+      return res.status(200).send('Not finished yet');
     }
 
-    if (event.event_type === 'subscription.cancelled' || event.event_type === 'subscription.paused') {
-      const subscriptionId = data.id;
-      await db.query(
-        `UPDATE api_keys SET tier='free', billing=NULL, paddle_subscription_id=NULL WHERE paddle_subscription_id=$1`,
-        [subscriptionId]
-      );
+    const orderId = data.order_id;
+    const email = data.order_description; // email goes here
+
+    let billing = 'monthly';
+    let days = 30;
+
+    if (orderId === 'unlimited_monthly_28') {
+      billing = 'monthly';
+      days = 30;
+    } else if (orderId === 'unlimited_yearly_260') {
+      billing = 'yearly';
+      days = 365;
+    } else {
+      return res.status(400).send('Unknown order_id');
     }
-    res.sendStatus(200);
+
+    // 3. Upgrade user in DB
+    const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    await db.query(
+      `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
+      [billing, expiresAt, email]
+    );
+
+    console.log(`NP: Activated ${email} to pro ${billing} until ${expiresAt}`);
+    res.status(200).send('OK');
+
   } catch (e) {
-    console.error('Webhook error:', e);
-    res.sendStatus(500);
+    console.error('NowPayments webhook error:', e);
+    res.status(500).send('Server error');
   }
 });
 
