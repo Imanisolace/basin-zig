@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
-import { ClerkExpressWithAuth, requireAuth } from '@clerk/express';
+import { clerkMiddleware, requireAuth } from '@clerk/express'; // <-- FIXED NAME
 import db from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,7 +14,7 @@ const NP_IPN_SECRET = "CYiUIAEpuQDX1RrK2El7Vtwwb02hLCmi"; // Your NowPayments se
 
 // MIDDLEWARE
 app.use(express.json());
-app.use(ClerkExpressWithAuth({
+app.use(clerkMiddleware({ // <-- FIXED NAME
   secretKey: process.env.CLERK_SECRET_KEY
 }));
 
@@ -66,7 +66,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+  ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
