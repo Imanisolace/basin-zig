@@ -92,7 +92,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-    ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+   ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -167,12 +167,24 @@ async function checkLimit(req, res, next, type) {
   next();
 }
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'RDF AB Challenge', ts: new Date().toISOString() }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'Basin ZK API', ts: new Date().toISOString() }));
 
 app.post('/apikey', async (req, res) => {
   try {
     const { email, user_id } = req.body;
     if (!email ||!user_id) return res.status(400).json({ error: 'email and user_id required' });
+
+    // Check if user already has a key - prevent duplicates
+    const existing = await db.query('SELECT * FROM api_keys WHERE email = $1', [email]);
+    if (existing.rows.length > 0) {
+      return res.json({
+        apiKey: existing.rows[0].api_key,
+        tier: existing.rows[0].tier,
+        billing: existing.rows[0].billing,
+        limits: LIMITS[existing.rows[0].tier]
+      });
+    }
+
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
     await db.query('INSERT INTO api_keys(email, api_key, user_id) VALUES($1, $2, $3)', [email, apiKey, user_id]);
     res.json({ apiKey, tier: 'free', billing: null, limits: LIMITS.free });
@@ -233,8 +245,8 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
 
     // 1. Verify signature
     const sign = crypto.createHmac('sha512', NP_IPN_SECRET)
-                    .update(JSON.stringify(data))
-                    .digest('hex');
+                   .update(JSON.stringify(data))
+                   .digest('hex');
 
     if (signature!== sign) {
       console.error("Invalid NowPayments signature");
@@ -277,5 +289,22 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
+// ==================== DEV ONLY - REMOVE BEFORE LAUNCH ====================
+app.get('/dev/upgrade', async (req, res) => {
+  const { email, plan } = req.query;
+  if (!email) return res.status(400).send('?email=required&plan=monthly|yearly');
+
+  const days = plan === 'yearly'? 365 : 30;
+  const billing = plan === 'yearly'? 'yearly' : 'monthly';
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  await db.query(
+    `UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE email=$3`,
+    [billing, expiresAt, email]
+  );
+  res.send(`Upgraded ${email} to pro ${billing} until ${expiresAt.toDateString()}. Go to /dashboard`);
+});
+// =======================================================================
 
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`));
