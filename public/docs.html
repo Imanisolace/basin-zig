@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><title>Basin Docs</title>
+<style>body { font-family: monospace; background: #0a0a0a; color: #fff; padding: 40px; } pre { background: #111; padding: 15px; border-radius: 5px; overflow-x: auto; }</style>
+</head>
+<body>
+<h1>Basin ZK API Docs</h1>
+<p>Base URL: <code>https://basin-zig-production.up.railway.app</code></p>
+<p>Auth: Send <code>x-api-key</code> header</p>
+
+<h2>1. Get API Key</h2>
+<pre>POST /apikey
+{ "email": "you@email.com", "user_id": "clerk_123" }</pre>
+
+<h2>2. Generate Proof</h2>
+<pre>curl -X POST https://basin-zig-production.up.railway.app/prove \
+-H "x-api-key: zk_YOUR_KEY" \
+-H "Content-Type: application/json" \
+-d '{"item":"alice"}'</pre>
+<p>Response: <code>{ root, proof, target_index, valid }</code></p>
+
+<h2>3. Verify Proof</h2>
+<pre>curl -X POST https://basin-zig-production.up.railway.app/verify \
+-H "x-api-key: zk_YOUR_KEY" \
+-H "Content-Type: application/json" \
+-d '{ "root": "...", "item": "alice", "target_index": 0, "proof": [...] }'</pre>
+
+<h2>4. Check Usage</h2>
+<pre>curl https://basin-zig-production.up.railway.app/usage \
+-H "x-api-key: zk_YOUR_KEY"</pre>
+
+<p><a href="/">Back Home</a></p>
+</body>
+</html>
