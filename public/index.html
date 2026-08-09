@@ -17,7 +17,6 @@
   .plan.pro { border: 2px solid #4f46e5; background: #0f0f1a; }
   .btn { background: #4f46e5; color: #fff; padding: 12px 24px; border: none; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; cursor: pointer; font-weight: 600; }
   .btn:hover { background: #4338ca; }
-  .btn:disabled { background: #333; cursor: not-allowed; }
   .unlimited { color: #22c55e; font-weight: bold; font-size: 18px; }
   code { background: #222; padding: 4px 8px; border-radius: 4px; font-size: 14px; word-break: break-all; }
   pre { background: #111; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; }
@@ -28,7 +27,8 @@
   .usage-bar { background: #222; border-radius: 8px; height: 8px; margin-top: 5px; }
   .usage-fill { background: #4f46e5; height: 8px; border-radius: 8px; }
   .locked { opacity: 0.5; pointer-events: none; }
-  #user-button { min-width: 100px; }
+  #auth-container { min-width: 120px; }
+  clerk-sign-in-button button, clerk-user-button { background: #4f46e5 !important; color: #fff !important; border-radius: 8px !important; padding: 10px 20px !important; border: none !important; font-weight: 600 !important; }
 </style>
 </head>
 <body>
@@ -42,7 +42,16 @@
         <a onclick="showPage('privacy')">Privacy</a>
         <a onclick="showPage('refund')">Refund</a>
       </div>
-      <div id="auth-container"></div>
+      <div id="auth-container">
+        <clerk-signed-out>
+          <clerk-sign-in-button mode="modal">
+            <button class="btn">Sign In</button>
+          </clerk-sign-in-button>
+        </clerk-signed-out>
+        <clerk-signed-in>
+          <clerk-user-button></clerk-user-button>
+        </clerk-signed-in>
+      </div>
     </nav>
 
     <div id="app"></div>
@@ -58,37 +67,25 @@ const app = document.getElementById('app');
 
 window.addEventListener('load', async function () {
   await Clerk.load();
-  renderAuthButton();
   
+  Clerk.addListener(({ user }) => {
+    if (user) {
+      CURRENT_USER_ID = user.id;
+      fetch('/apikey', { method: 'POST' });
+    } else {
+      CURRENT_USER_ID = null;
+    }
+    render(window.location.pathname.replace('/', '') || 'home');
+  });
+
   if (Clerk.user) {
     CURRENT_USER_ID = Clerk.user.id;
-    // Auto create API key on login
     fetch('/apikey', { method: 'POST' });
   }
+  
   const initialPage = window.location.pathname.replace('/', '') || 'home';
   render(initialPage);
 });
-
-Clerk.addListener(({ user }) => {
-  if (user) {
-    CURRENT_USER_ID = user.id;
-    fetch('/apikey', { method: 'POST' });
-  } else {
-    CURRENT_USER_ID = null;
-  }
-  renderAuthButton();
-});
-
-function renderAuthButton() {
-  const container = document.getElementById('auth-container');
-  if (Clerk.user) {
-    container.innerHTML = '<div id="user-button"></div>';
-    Clerk.mountUserButton(document.getElementById("user-button"));
-  } else {
-    container.innerHTML = '<button id="login-btn" class="btn" style="padding:8px 16px;">Sign In</button>';
-    document.getElementById('login-btn').onclick = () => Clerk.openSignIn({});
-  }
-}
 
 window.addEventListener('popstate', () => {
   const page = window.location.pathname.replace('/', '') || 'home';
@@ -97,7 +94,7 @@ window.addEventListener('popstate', () => {
 
 function requireLogin(page) {
   if(!Clerk.user) {
-    Clerk.openSignIn({});
+    document.querySelector('clerk-sign-in-button').click();
     return;
   }
   showPage(page);
@@ -150,7 +147,7 @@ function renderHome() {
 
 function handleUpgrade(link) {
   if(!Clerk.user) {
-    Clerk.openSignIn({});
+    document.querySelector('clerk-sign-in-button').click();
     return;
   }
   window.location.href = link;
@@ -158,7 +155,7 @@ function handleUpgrade(link) {
 
 async function renderDashboard() {
   if(!Clerk.user) {
-    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view your dashboard and API key.</p><button onclick="Clerk.openSignIn({})" class="btn">Sign In</button></div>`;
+    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view your dashboard and API key.</p><clerk-sign-in-button mode="modal"><button class="btn">Sign In</button></clerk-sign-in-button></div>`;
     return;
   }
   
@@ -191,7 +188,7 @@ async function renderDashboard() {
 
 function renderDocs() {
   if(!Clerk.user) {
-    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view API docs and get your API key.</p><button onclick="Clerk.openSignIn({})" class="btn">Sign In</button></div>`;
+    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view API docs and get your API key.</p><clerk-sign-in-button mode="modal"><button class="btn">Sign In</button></clerk-sign-in-button></div>`;
     return;
   }
   app.innerHTML = `
