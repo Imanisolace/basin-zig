@@ -7,26 +7,27 @@
 <script async crossorigin="anonymous" data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #ddd; margin: 0; padding: 0; line-height: 1.6; }
- .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
+  .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
   nav { padding: 20px 0; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
   nav a { color: #888; margin: 0 15px; text-decoration: none; font-weight: 500; cursor: pointer; }
   nav a:hover { color: #fff; }
-.card { background: #111; padding: 25px; border-radius: 12px; margin-top: 20px; border: 1px solid #222; }
-.pricing { display: flex; gap: 20px; margin-top: 30px; flex-wrap: wrap; }
-.plan { background: #111; padding: 25px; border-radius: 12px; flex: 1; border: 1px solid #333; min-width: 280px; }
-.plan.pro { border: 2px solid #4f46e5; background: #0f0f1a; }
-.btn { background: #4f46e5; color: #fff; padding: 12px 24px; border: none; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; cursor: pointer; font-weight: 600; }
-.btn:hover { background: #4338ca; }
-.btn:disabled { background: #333; cursor: not-allowed; }
-.unlimited { color: #22c55e; font-weight: bold; font-size: 18px; }
- code { background: #222; padding: 4px 8px; border-radius: 4px; font-size: 14px; word-break: break-all; }
- pre { background: #111; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; }
- footer { margin-top: 80px; padding: 30px 0; text-align: center; color: #555; border-top: 1px solid #222; }
- h1 { font-size: 48px; margin-bottom: 10px; }
- h2 { font-size: 32px; margin-top: 40px; }
-.legal { max-width: 800px; }
-.usage-bar { background: #222; border-radius: 8px; height: 8px; margin-top: 5px; }
-.usage-fill { background: #4f46e5; height: 8px; border-radius: 8px; }
+  .card { background: #111; padding: 25px; border-radius: 12px; margin-top: 20px; border: 1px solid #222; }
+  .pricing { display: flex; gap: 20px; margin-top: 30px; flex-wrap: wrap; }
+  .plan { background: #111; padding: 25px; border-radius: 12px; flex: 1; border: 1px solid #333; min-width: 280px; }
+  .plan.pro { border: 2px solid #4f46e5; background: #0f0f1a; }
+  .btn { background: #4f46e5; color: #fff; padding: 12px 24px; border: none; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; cursor: pointer; font-weight: 600; }
+  .btn:hover { background: #4338ca; }
+  .btn:disabled { background: #333; cursor: not-allowed; }
+  .unlimited { color: #22c55e; font-weight: bold; font-size: 18px; }
+  code { background: #222; padding: 4px 8px; border-radius: 4px; font-size: 14px; word-break: break-all; }
+  pre { background: #111; padding: 15px; border-radius: 8px; overflow-x: auto; border: 1px solid #333; }
+  footer { margin-top: 80px; padding: 30px 0; text-align: center; color: #555; border-top: 1px solid #222; }
+  h1 { font-size: 48px; margin-bottom: 10px; }
+  h2 { font-size: 32px; margin-top: 40px; }
+  .legal { max-width: 800px; }
+  .usage-bar { background: #222; border-radius: 8px; height: 8px; margin-top: 5px; }
+  .usage-fill { background: #4f46e5; height: 8px; border-radius: 8px; }
+  .locked { opacity: 0.5; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -35,7 +36,7 @@
       <div>
         <a onclick="showPage('home')">Basin</a>
         <a onclick="showPage('docs')">Docs</a>
-        <a onclick="showPage('dashboard')">Dashboard</a>
+        <a onclick="requireLogin('dashboard')">Dashboard</a>
         <a onclick="showPage('terms')">Terms</a>
         <a onclick="showPage('privacy')">Privacy</a>
         <a onclick="showPage('refund')">Refund</a>
@@ -56,6 +57,7 @@ const app = document.getElementById('app');
 
 window.addEventListener('load', async function () {
   await Clerk.load();
+  
   if (Clerk.user) {
     CURRENT_USER_ID = Clerk.user.id;
     Clerk.mountUserButton(document.getElementById("user-button"));
@@ -72,6 +74,14 @@ window.addEventListener('popstate', () => {
   const page = window.location.pathname.replace('/', '') || 'home';
   render(page);
 });
+
+function requireLogin(page) {
+  if(!Clerk.user) {
+    Clerk.openSignIn({}); // Force login popup
+    return;
+  }
+  showPage(page);
+}
 
 function showPage(page) {
   window.history.pushState({}, '', '/' + page);
@@ -104,21 +114,35 @@ function renderHome() {
       <h3>Free</h3><p style="font-size: 28px; font-weight: bold;">$0</p>
       <p>1000 Prove / 5000 Verify per month</p><p>10 req/min</p>
     </div>
-    <div class="plan pro">
+    <div class="plan pro ${!CURRENT_USER_ID ? 'locked' : ''}">
       <h3>Pro Monthly</h3><p style="font-size: 28px; font-weight: bold;">$28<span style="font-size: 16px; color: #aaa;">/mo</span></p>
       <p class="unlimited">UNLIMITED Prove & Verify</p><p>1000 req/min</p>
-      <a href="${monthlyLink}" class="btn" onclick="!CURRENT_USER_ID && (alert('Please login first'), event.preventDefault())">Upgrade Monthly</a>
+      <button class="btn" onclick="handleUpgrade('${monthlyLink}')">Upgrade Monthly</button>
     </div>
-    <div class="plan pro">
+    <div class="plan pro ${!CURRENT_USER_ID ? 'locked' : ''}">
       <h3>Pro Yearly</h3><p style="font-size: 28px; font-weight: bold;">$260<span style="font-size: 16px; color: #aaa;">/yr</span></p>
       <p class="unlimited">UNLIMITED Prove & Verify</p><p>1000 req/min</p><p>Save 22%</p>
-      <a href="${yearlyLink}" class="btn" onclick="!CURRENT_USER_ID && (alert('Please login first'), event.preventDefault())">Upgrade Yearly</a>
+      <button class="btn" onclick="handleUpgrade('${yearlyLink}')">Upgrade Yearly</button>
     </div>
-  </div>`;
+  </div>
+  ${!CURRENT_USER_ID ? '<p style="text-align:center; margin-top:20px; color:#aaa;">Login to unlock Pro plans</p>' : ''}`;
+}
+
+function handleUpgrade(link) {
+  if(!Clerk.user) {
+    Clerk.openSignIn({});
+    return;
+  }
+  window.location.href = link;
 }
 
 async function renderDashboard() {
-  if(!Clerk.user) return app.innerHTML = `<div class="card"><h2>Please login first</h2></div>`;
+  if(!Clerk.user) {
+    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view your dashboard and API key.</p><div id="login-box"></div></div>`;
+    Clerk.mountSignIn(document.getElementById("login-box"));
+    return;
+  }
+  
   app.innerHTML = `<h2>Dashboard</h2><div class="card" id="dashboard-card">Loading...</div>`;
 
   const res = await fetch('/usage');
@@ -147,15 +171,20 @@ async function renderDashboard() {
 }
 
 function renderDocs() {
+  if(!Clerk.user) {
+    app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view API docs and get your API key.</p><div id="login-box"></div></div>`;
+    Clerk.mountSignIn(document.getElementById("login-box"));
+    return;
+  }
   app.innerHTML = `
   <h2>API Documentation</h2>
-  <p>Base URL: <code>https://yourapp.com</code></p>
-  <p>Auth: Login first, then use <code>x-api-key: zk_...</code> from Dashboard</p>
+  <p>Base URL: <code>https://basin-zig-production.up.railway.app</code></p>
+  <p>Auth: Use <code>x-api-key: zk_...</code> from Dashboard</p>
   
   <div class="card">
     <h3>POST /prove</h3>
     <p>Generate a Merkle proof for an item</p>
-    <pre>curl -X POST https://yourapp.com/prove \\
+    <pre>curl -X POST https://basin-zig-production.up.railway.app/prove \\
 -H "x-api-key: zk_..." \\
 -H "Content-Type: application/json" \\
 -d '{"item": "alice"}'</pre>
@@ -165,7 +194,7 @@ function renderDocs() {
   <div class="card">
     <h3>POST /verify</h3>
     <p>Verify a Merkle proof</p>
-    <pre>curl -X POST https://yourapp.com/verify \\
+    <pre>curl -X POST https://basin-zig-production.up.railway.app/verify \\
 -H "x-api-key: zk_..." \\
 -H "Content-Type: application/json" \\
 -d '{"root": "...", "item": "alice", "target_index": 0, "proof": [...]}'</pre>
@@ -175,7 +204,7 @@ function renderDocs() {
   <div class="card">
     <h3>GET /usage</h3>
     <p>Get your current usage and limits</p>
-    <pre>curl https://yourapp.com/usage -H "x-api-key: zk_..."</pre>
+    <pre>curl https://basin-zig-production.up.railway.app/usage -H "x-api-key: zk_..."</pre>
   </div>
   `;
 }
