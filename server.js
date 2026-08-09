@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
-import { clerkMiddleware, requireAuth } from '@clerk/express'; // <-- FIXED NAME
+import { clerkMiddleware, requireAuth } from '@clerk/express';
 import db from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,7 +14,7 @@ const NP_IPN_SECRET = "CYiUIAEpuQDX1RrK2El7Vtwwb02hLCmi"; // Your NowPayments se
 
 // MIDDLEWARE
 app.use(express.json());
-app.use(clerkMiddleware({ // <-- FIXED NAME
+app.use(clerkMiddleware({
   secretKey: process.env.CLERK_SECRET_KEY
 }));
 
@@ -66,7 +66,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-  ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+ ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -191,7 +191,7 @@ app.get('/usage', requireAuth(), getUser, autoReset, (req, res) => {
   });
 });
 
-// NOWPAYMENTS WEBHOOK - NOW USES USER_ID
+// NOWPAYMENTS WEBHOOK - FIXED FOR YOUR PAYMENT LINKS
 app.post('/webhook/nowpayments', express.json(), async (req, res) => {
   try {
     const data = req.body;
@@ -200,8 +200,8 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
     if (signature!== sign) return res.status(400).send('Invalid signature');
     if (data.payment_status!== 'finished') return res.status(200).send('Not finished');
 
-    const userId = data.order_description; // This is Clerk userId now
-    let billing = data.payment_id === '4328033905'? 'yearly' : 'monthly';
+    const userId = data.order_id; // FIXED: was order_description
+    let billing = data.iid === '4328033905'? 'yearly' : 'monthly'; // FIXED: was payment_id
     let days = billing === 'yearly'? 365 : 30;
 
     const expiresAt = new Date();
