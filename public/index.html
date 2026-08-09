@@ -3,33 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <title>Basin - AI Backend API</title>
+  <!-- THIS IS THE OFFICIAL CLERK CDN -->
   <script 
     async 
     crossorigin="anonymous" 
     data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" 
-    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
+    src="https://saving-sole-98.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
     type="text/javascript">
   </script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1000px; margin: 50px auto; padding: 20px; line-height: 1.6; color: #111; }
     nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     nav a { margin-right: 15px; text-decoration: none; color: #111; }
-    nav a:hover { text-decoration: underline; }
     footer { margin-top: 100px; border-top: 1px solid #eee; padding-top: 20px; font-size: 14px; color: #666; }
    .page { display: none; }
    .page.active { display: block; }
    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
    .plan { border: 1px solid #ddd; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
-   .plan.highlight { border: 2px solid #111; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-   .plan h3 { margin-top: 0; font-size: 22px; }
-   .price { font-size: 32px; font-weight: bold; color: #111; margin: 10px 0; }
+   .plan.highlight { border: 2px solid #111; }
+   .price { font-size: 32px; font-weight: bold; }
    .badge { background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-   .btn { background: #111; color: white; padding: 12px 18px; border-radius: 6px; text-decoration: none; text-align: center; margin-top: 10px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; }
-   .btn:hover { background: #333; }
+   .btn { background: #111; color: white; padding: 12px 18px; border-radius: 6px; text-align: center; margin-top: 10px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; }
    .btn:disabled { background: #ccc; cursor: not-allowed; }
    .dashboard-box { background: #f8f8f8; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #eee; }
-   code { background: #eee; padding: 2px 6px; border-radius: 4px; word-break: break-all; font-family: monospace; }
-   #login-msg { font-size:12px; color:#666; margin-top:8px; }
   </style>
 </head>
 <body>
@@ -46,84 +42,40 @@
   </nav>
   <hr>
 
-  <!-- HOME PAGE -->
   <div id="home" class="page">
     <h2>AI Backend API for Developers</h2>
-    <p>Verifiable AI with Merkle proofs. Build AI features in minutes, not months.</p>
-
     <h3>Pricing</h3>
     <div class="pricing-grid">
-      <div class="plan">
-        <h3>Free</h3>
-        <p class="price">$0</p>
-        <p>1,000 prove / month</p>
-        <p>5,000 verify / month</p>
-        <p>10 req/min</p>
-      </div>
-
+      <div class="plan"><h3>Free</h3><p class="price">$0</p><p>1,000 prove / month</p></div>
       <div class="plan highlight">
         <h3>Pro</h3>
         <p class="price">$28/mo</p>
         <p>or <b>$260/yr</b> <span class="badge">Save 23%</span></p>
         <p><b>Unlimited</b> prove</p>
-        <p><b>Unlimited</b> verify</p>
-        <p>10,000 req/min</p>
         <button id="btn-monthly" class="btn">Buy Monthly $28</button>
         <button id="btn-yearly" class="btn">Buy Annual $260</button>
         <p id="login-msg">Login to purchase</p>
       </div>
     </div>
-    <p style="margin-top:20px;">All plans billed via NowPayments. Cancel anytime. Contact: support@basin.ai</p>
   </div>
 
-  <!-- DASHBOARD PAGE -->
-  <div id="dashboard" class="page">
-    <h2>Dashboard</h2>
-    <div id="dashboard-content">
-      <p>Loading...</p>
-    </div>
-  </div>
+  <div id="dashboard" class="page"><h2>Dashboard</h2><div id="dashboard-content"><p>Loading...</p></div></div>
+  <div id="terms" class="page"><h2>Terms</h2></div>
+  <div id="privacy" class="page"><h2>Privacy</h2></div>
+  <div id="refund" class="page"><h2>Refund</h2></div>
 
-  <!-- LEGAL PAGES -->
-  <div id="terms" class="page">
-    <h2>Terms of Service</h2>
-    <p>Last Updated: August 7, 2026</p>
-    <p><b>1. Services:</b> Basin provides API access for AI backend services with verifiable proofs.</p>
-    <p><b>2. Payments:</b> Subscriptions are billed monthly or yearly via NowPayments. Cancel anytime.</p>
-    <p><b>3. Usage:</b> Free tier limits reset on the 1st of each month.</p>
-    <p><b>4. Liability:</b> Service is provided "as is" without warranties.</p>
-  </div>
-
-  <div id="privacy" class="page">
-    <h2>Privacy Policy</h2>
-    <p>Last Updated: August 7, 2026</p>
-    <p><b>What we collect:</b> Email via Clerk, payment info via NowPayments, and API usage logs.</p>
-    <p><b>How we use it:</b> To provide the service, billing, rate limiting, and support.</p>
-    <p><b>We do NOT:</b> Sell your data. API inputs are not stored or used for training.</p>
-  </div>
-
-  <div id="refund" class="page">
-    <h2>Refund Policy</h2>
-    <p>Last Updated: August 7, 2026</p>
-    <p>Subscriptions can be canceled anytime. Access continues until the end of billing period.</p>
-    <p>Refunds are considered within 7 days of first charge on a case-by-case basis.</p>
-    <p>To request a refund contact: support@basin.ai</p>
-  </div>
-
-  <footer>
-    Contact: support@basin.ai | © 2026 Basin
-  </footer>
+  <footer>Contact: support@basin.ai | © 2026 Basin</footer>
 
   <script>
-    // Wait for Clerk to load
     function initClerk() {
       if (!window.Clerk) {
-        setTimeout(initClerk, 100);
+        console.log("Waiting for Clerk...");
+        setTimeout(initClerk, 200);
         return;
       }
 
       Clerk.load().then(() => {
-        console.log("Clerk loaded");
+        console.log("Clerk loaded!", Clerk.user);
 
         function updateUI() {
           const userBtnDiv = document.getElementById('user-button');
@@ -139,7 +91,10 @@
             if(loginMsg) loginMsg.style.display = 'none';
           } else {
             userBtnDiv.innerHTML = '<button class="btn" id="login-btn">Login</button>';
-            document.getElementById('login-btn').onclick = () => Clerk.openSignIn();
+            document.getElementById('login-btn').onclick = () => {
+              console.log("Opening signin...");
+              Clerk.openSignIn();
+            };
             if(btnMonthly) btnMonthly.disabled = true;
             if(btnYearly) btnYearly.disabled = true;
             if(loginMsg) loginMsg.style.display = 'block';
@@ -149,31 +104,21 @@
         updateUI();
         Clerk.addListener(updateUI);
 
-        // Router
         const page = window.location.pathname.substring(1) || 'home';
         const el = document.getElementById(page);
         if(el) el.classList.add('active');
 
-        // Dashboard
         if(page === 'dashboard') {
           const dashContent = document.getElementById('dashboard-content');
           if(!Clerk.user) {
-            dashContent.innerHTML = '<p>Please <button class="btn" id="login-btn-dash">Login</button> to view dashboard</p>';
+            dashContent.innerHTML = '<p>Please <button class="btn" id="login-btn-dash">Login</button></p>';
             document.getElementById('login-btn-dash').onclick = () => Clerk.openSignIn();
           } else {
             const email = Clerk.user.primaryEmailAddress.emailAddress;
-            dashContent.innerHTML = `
-              <div class="dashboard-box">
-                <h3>Welcome, ${email}</h3>
-                <p><b>Plan:</b> Free</p>
-                <p><b>API Key:</b> <code>Generate via API</code></p>
-                <p><b>Usage this month:</b> 0 prove / 0 verify</p>
-                <p>Upgrade to Pro for Unlimited access</p>
-              </div>`;
+            dashContent.innerHTML = `<div class="dashboard-box"><h3>Welcome, ${email}</h3><p><b>Plan:</b> Free</p></div>`;
           }
         }
 
-        // Payment
         function goToPayment(plan) {
           if(!Clerk.user) { Clerk.openSignIn(); return; }
           const email = Clerk.user.primaryEmailAddress.emailAddress;
