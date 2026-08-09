@@ -1,188 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Basin - AI Backend API</title>
-  <!-- THIS IS THE OFFICIAL CLERK CDN -->
-  <script 
-    async 
-    crossorigin="anonymous" 
-    data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" 
-    src="https://saving-sole-98.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"
-    type="text/javascript">
-  </script>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 1000px; margin: 50px auto; padding: 20px; line-height: 1.6; color: #111; }
-    nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    nav a { margin-right: 15px; text-decoration: none; color: #111; }
-    footer { margin-top: 100px; border-top: 1px solid #eee; padding-top: 20px; font-size: 14px; color: #666; }
-   .page { display: none; }
-   .page.active { display: block; }
-   .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 20px; }
-   .plan { border: 1px solid #ddd; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; }
-   .plan.highlight { border: 2px solid #111; }
-   .price { font-size: 32px; font-weight: bold; }
-   .badge { background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-   .btn { background: #111; color: white; padding: 12px 18px; border-radius: 6px; text-align: center; margin-top: 10px; font-weight: bold; cursor: pointer; border: none; font-size: 16px; }
-   .btn:disabled { background: #ccc; cursor: not-allowed; }
-   .dashboard-box { background: #f8f8f8; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #eee; }
-   code { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basin - ZK Proof API</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #0a0a0a; color: #fff; margin: 0; padding: 20px; }
+  nav a { color: #888; margin: 0 10px; text-decoration: none; }
+  nav a:hover { color: #fff; }
+ .card { background: #111; padding: 20px; border-radius: 8px; margin-top: 20px; }
+ .pricing { display: flex; gap: 20px; margin-top: 20px; }
+ .plan { background: #1a1a1a; padding: 20px; border-radius: 8px; flex: 1; border: 1px solid #333; }
+ .plan.pro { border: 2px solid #4f46e5; }
+ .btn { background: #4f46e5; color: #fff; padding: 10px 20px; border: none; border-radius: 5px; text-decoration: none; display: inline-block; margin-top: 10px; }
+ .btn:hover { background: #4338ca; }
+ .unlimited { color: #22c55e; font-weight: bold; }
+</style>
 </head>
 <body>
   <h1>Basin</h1>
   <nav>
-    <div>
-      <a href="/">Home</a> | 
-      <a href="/dashboard">Dashboard</a> | 
-      <a href="/terms">Terms</a> | 
-      <a href="/privacy">Privacy</a> | 
-      <a href="/refund">Refund</a>
-    </div>
-    <div id="user-button"></div>
+    <a href="/">Home</a> |
+    <a href="/dashboard">Dashboard</a> |
+    <a href="/terms">Terms</a> |
+    <a href="/privacy">Privacy</a> |
+    <a href="/refund">Refund</a>
   </nav>
   <hr>
 
-  <div id="home" class="page">
-    <h2>AI Backend API for Developers</h2>
-    <h3>Pricing</h3>
-    <div class="pricing-grid">
-      <div class="plan"><h3>Free</h3><p class="price">$0</p><p>1,000 prove / month</p><p>5,000 verify / month</p></div>
-      <div class="plan highlight">
-        <h3>Pro</h3>
-        <p class="price">$28/mo</p>
-        <p>or <b>$260/yr</b> <span class="badge">Save 23%</span></p>
-        <p><b>50,000</b> prove / month</p>
-        <p><b>200,000</b> verify / month</p>
-        <button id="btn-monthly" class="btn">Buy Monthly $28</button>
-        <button id="btn-yearly" class="btn">Buy Annual $260</button>
-        <p id="login-msg">Login to purchase</p>
-      </div>
+  <div id="app"></div>
+
+<script>
+const path = window.location.pathname;
+const app = document.getElementById('app');
+
+if(path === '/dashboard') {
+  app.innerHTML = `
+  <h2>Dashboard</h2>
+  <div class="card" id="dashboard-card">Loading...</div>
+  `;
+  loadDashboard();
+} else {
+  app.innerHTML = `
+  <h2>ZK Proof API for Developers</h2>
+  <p>Generate and verify Merkle proofs with 1 API call. No infra needed.</p>
+  
+  <h2>Pricing</h2>
+  <div class="pricing">
+    <div class="plan">
+      <h3>Free</h3>
+      <p>$0 / month</p>
+      <p>1000 Prove / 5000 Verify</p>
+      <p>10 req/min</p>
+    </div>
+    <div class="plan pro">
+      <h3>Pro Monthly</h3>
+      <p>$28 / month</p>
+      <p class="unlimited">UNLIMITED Prove & Verify</p>
+      <p>1000 req/min</p>
+      <a href="https://nowpayments.io/payment/link/4900460102" class="btn">Upgrade Monthly</a>
+    </div>
+    <div class="plan pro">
+      <h3>Pro Yearly</h3>
+      <p>$260 / year</p>
+      <p class="unlimited">UNLIMITED Prove & Verify</p>
+      <p>1000 req/min</p>
+      <p>Save 22%</p>
+      <a href="https://nowpayments.io/payment/link/4328033905" class="btn">Upgrade Yearly</a>
     </div>
   </div>
+  `;
+}
 
-  <div id="dashboard" class="page"><h2>Dashboard</h2><div id="dashboard-content"><p>Loading...</p></div></div>
-  <div id="terms" class="page"><h2>Terms</h2><p>Standard SaaS terms.</p></div>
-  <div id="privacy" class="page"><h2>Privacy</h2><p>We don't store your data. Only usage metrics.</p></div>
-  <div id="refund" class="page"><h2>Refund</h2><p>7 day refund policy.</p></div>
-
-  <footer>Contact: support@basin.ai | © 2026 Basin</footer>
-
-  <script>
-    const API_URL = window.location.origin; // works on localhost and railway
-
-    async function getOrCreateApiKey(email, userId) {
-      let apiKey = localStorage.getItem('basin_api_key');
-      if (apiKey) return apiKey;
-
-      // Call backend to create key
-      const res = await fetch(API_URL + '/apikey', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, user_id: userId })
-      });
-      const data = await res.json();
-      if (data.apiKey) {
-        localStorage.setItem('basin_api_key', data.apiKey);
-        return data.apiKey;
-      }
-      throw new Error("Failed to create API key");
-    }
-
-    function initClerk() {
-      if (!window.Clerk) {
-        setTimeout(initClerk, 200);
-        return;
-      }
-
-      Clerk.load().then(async () => {
-        console.log("Clerk loaded!", Clerk.user);
-
-        async function updateUI() {
-          const userBtnDiv = document.getElementById('user-button');
-          const btnMonthly = document.getElementById('btn-monthly');
-          const btnYearly = document.getElementById('btn-yearly');
-          const loginMsg = document.getElementById('login-msg');
-
-          if (Clerk.user) {
-            userBtnDiv.innerHTML = '<div id="clerk-user-button"></div>';
-            Clerk.mountUserButton(document.getElementById('clerk-user-button'));
-            if(btnMonthly) btnMonthly.disabled = false;
-            if(btnYearly) btnYearly.disabled = false;
-            if(loginMsg) loginMsg.style.display = 'none';
-            
-            // Auto create API key on login
-            const email = Clerk.user.primaryEmailAddress.emailAddress;
-            const userId = Clerk.user.id;
-            try {
-              await getOrCreateApiKey(email, userId);
-            } catch(e) { console.error(e) }
-
-          } else {
-            userBtnDiv.innerHTML = '<button class="btn" id="login-btn">Login</button>';
-            document.getElementById('login-btn').onclick = () => Clerk.openSignIn();
-            if(btnMonthly) btnMonthly.disabled = true;
-            if(btnYearly) btnYearly.disabled = true;
-            if(loginMsg) loginMsg.style.display = 'block';
-          }
-        }
-
-        updateUI();
-        Clerk.addListener(updateUI);
-
-        const page = window.location.pathname.substring(1) || 'home';
-        const el = document.getElementById(page);
-        if(el) el.classList.add('active');
-
-        if(page === 'dashboard') {
-          const dashContent = document.getElementById('dashboard-content');
-          if(!Clerk.user) {
-            dashContent.innerHTML = '<p>Please <button class="btn" id="login-btn-dash">Login</button></p>';
-            document.getElementById('login-btn-dash').onclick = () => Clerk.openSignIn();
-          } else {
-            const email = Clerk.user.primaryEmailAddress.emailAddress;
-            const apiKey = localStorage.getItem('basin_api_key');
-            
-            dashContent.innerHTML = `<div class="dashboard-box"><h3>Welcome, ${email}</h3><p>Loading usage...</p></div>`;
-
-            // Fetch real usage from backend
-            fetch(API_URL + '/usage', {
-              headers: { 'x-api-key': apiKey }
-            })
-            .then(res => res.json())
-            .then(data => {
-              dashContent.innerHTML = `
-                <div class="dashboard-box">
-                  <h3>Welcome, ${email}</h3>
-                  <p><b>Plan:</b> ${data.tier} ${data.billing? '(' + data.billing + ')' : ''}</p>
-                  <p><b>API Key:</b> <code>${apiKey}</code></p>
-                  <p><b>Prove:</b> ${data.usage.prove} / ${data.limits.prove === Infinity? '∞' : data.limits.prove}</p>
-                  <p><b>Verify:</b> ${data.usage.verify} / ${data.limits.verify === Infinity? '∞' : data.limits.verify}</p>
-                  <p><b>Rate Limit:</b> ${data.rate_limit.max} req/min</p>
-                  <p><b>Resets:</b> ${new Date(data.last_reset).toLocaleDateString()}</p>
-                  <p><b>Expires:</b> ${data.expires_at? new Date(data.expires_at).toLocaleDateString() : 'Never'}</p>
-                </div>
-              `;
-            })
-            .catch(err => {
-              dashContent.innerHTML = `<div class="dashboard-box"><p>Error loading usage. ${err.message}</p></div>`;
-            });
-          }
-        }
-
-        function goToPayment(plan) {
-          if(!Clerk.user) { Clerk.openSignIn(); return; }
-          const email = Clerk.user.primaryEmailAddress.emailAddress;
-          const iid = plan === 'monthly' ? '4900460102' : '4328033905';
-          window.location.href = `https://nowpayments.io/payment/?iid=${iid}&order_description=${encodeURIComponent(email)}`;
-        }
-        const btnM = document.getElementById('btn-monthly');
-        const btnY = document.getElementById('btn-yearly');
-        if(btnM) btnM.onclick = () => goToPayment('monthly');
-        if(btnY) btnY.onclick = () => goToPayment('yearly');
-      });
-    }
-    initClerk();
-  </script>
+async function loadDashboard() {
+  const apiKey = localStorage.getItem('apiKey'); // Or get from Clerk
+  if(!apiKey) return document.getElementById('dashboard-card').innerText = 'Please login';
+  
+  const res = await fetch('/usage', { headers: { 'x-api-key': apiKey } });
+  const data = await res.json();
+  
+  const proveLimit = data.limits.prove === Infinity? 'Unlimited' : data.limits.prove;
+  const verifyLimit = data.limits.verify === Infinity? 'Unlimited' : data.limits.verify;
+  
+  document.getElementById('dashboard-card').innerHTML = `
+    <h3>Welcome, ${data.email || 'User'}</h3>
+    <p><b>Plan:</b> ${data.tier} (${data.billing || 'none'})</p>
+    <p><b>API Key:</b> <code>${apiKey}</code></p>
+    <p><b>Prove:</b> ${data.usage.prove} / ${proveLimit}</p>
+    <p><b>Verify:</b> ${data.usage.verify} / ${verifyLimit}</p>
+    <p><b>Rate Limit:</b> ${data.rate_limit.max} req/min</p>
+    <p><b>Expires:</b> ${data.expires_at? new Date(data.expires_at).toLocaleDateString() : 'Never'}</p>
+  `;
+}
+</script>
 </body>
 </html>
