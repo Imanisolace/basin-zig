@@ -116,13 +116,14 @@ async function getUser(req, res, next) {
 async function autoReset(req, res, next) {
   try {
     const today = new Date();
-    const lastReset = new Date(req.user.last_reset || today);
+    const lastReset = req.user.last_reset? new Date(req.user.last_reset) : today; // FIX: handle NULL
     const isNewMonth = today.getMonth()!== lastReset.getMonth() || today.getFullYear()!== lastReset.getFullYear();
     if (isNewMonth) {
       console.log("autoReset: New month, resetting usage for", req.user.email);
       await db.query('UPDATE api_keys SET prove_usage=0, verify_usage=0, last_reset=$1 WHERE id=$2', [today, req.user.id]);
       req.user.prove_usage = 0;
       req.user.verify_usage = 0;
+      req.user.last_reset = today;
     }
     next();
   } catch (e) {
