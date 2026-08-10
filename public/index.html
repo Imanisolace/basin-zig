@@ -63,13 +63,14 @@ const waitForClerk = () => new Promise(resolve => {
 
 waitForClerk().then(async (Clerk) => {
   await Clerk.load();
-  
-  function updateAuthUI() {
+
+  async function updateAuthUI() {
     const container = document.getElementById('auth-btn');
     if (Clerk.user) {
       CURRENT_USER_ID = Clerk.user.id;
       container.innerHTML = `<button class="btn" onclick="Clerk.signOut()">Logout</button>`;
-      fetch('/apikey', { method: 'POST' });
+      // Auto create API key on login so dashboard doesn't get stuck
+      await fetch('/apikey', { method: 'POST' });
     } else {
       CURRENT_USER_ID = null;
       container.innerHTML = `<button class="btn" onclick="Clerk.openSignIn()">Sign In</button>`;
@@ -77,7 +78,7 @@ waitForClerk().then(async (Clerk) => {
   }
 
   Clerk.addListener(({ user }) => updateAuthUI());
-  updateAuthUI();
+  await updateAuthUI();
 
   const initialPage = window.location.pathname.replace('/', '') || 'home';
   render(initialPage);
@@ -154,32 +155,39 @@ async function renderDashboard() {
     app.innerHTML = `<div class="card"><h2>Login Required</h2><p>You must login to view your dashboard and API key.</p><button onclick="Clerk.openSignIn()" class="btn">Sign In</button></div>`;
     return;
   }
-  
+
   app.innerHTML = `<h2>Dashboard</h2><div class="card" id="dashboard-card">Loading...</div>`;
 
-  const res = await fetch('/usage');
-  if(!res.ok) return document.getElementById('dashboard-card').innerText = 'Error loading. Did you create API key?';
-  const data = await res.json();
+  try {
+    const res = await fetch('/usage');
+    if(!res.ok) {
+      const err = await res.json().catch(()=>({error:'Unknown error'}));
+      return document.getElementById('dashboard-card').innerHTML = `Error: ${err.error}<br><button onclick="fetch('/apikey', {method: 'POST'}).then(()=>location.reload())" class="btn">Create API Key</button>`;
+    }
+    const data = await res.json();
 
-  const proveLimit = data.limits.prove === Infinity? 'Unlimited' : data.limits.prove.toLocaleString();
-  const verifyLimit = data.limits.verify === Infinity? 'Unlimited' : data.limits.verify.toLocaleString();
-  const provePercent = data.limits.prove === Infinity? 0 : (data.usage.prove / data.limits.prove) * 100;
-  const verifyPercent = data.limits.verify === Infinity? 0 : (data.usage.verify / data.limits.verify) * 100;
+    const proveLimit = data.limits.prove === Infinity? 'Unlimited' : data.limits.prove.toLocaleString();
+    const verifyLimit = data.limits.verify === Infinity? 'Unlimited' : data.limits.verify.toLocaleString();
+    const provePercent = data.limits.prove === Infinity? 0 : (data.usage.prove / data.limits.prove) * 100;
+    const verifyPercent = data.limits.verify === Infinity? 0 : (data.usage.verify / data.limits.verify) * 100;
 
-  document.getElementById('dashboard-card').innerHTML = `
-    <h3>Account Overview</h3>
-    <p><b>Email:</b> ${data.email}</p>
-    <p><b>Plan:</b> <span style="text-transform: capitalize;">${data.tier}</span> ${data.billing? `(${data.billing})` : ''}</p>
-    <p><b>API Key:</b> <code id="key">${data.apiKey}</code>
-    <button class="btn" style="padding: 6px 12px; font-size: 12px; margin-left: 10px;" onclick="navigator.clipboard.writeText(document.getElementById('key').innerText)">Copy</button></p>
-    <hr style="border-color: #333; margin: 20px 0;">
-    <p><b>Prove Usage:</b> ${data.usage.prove.toLocaleString()} / ${proveLimit}</p>
-    ${data.limits.prove!== Infinity? `<div class="usage-bar"><div class="usage-fill" style="width: ${provePercent}%"></div></div>` : ''}
-    <p style="margin-top: 15px;"><b>Verify Usage:</b> ${data.usage.verify.toLocaleString()} / ${verifyLimit}</p>
-    ${data.limits.verify!== Infinity? `<div class="usage-bar"><div class="usage-fill" style="width: ${verifyPercent}%"></div></div>` : ''}
-    <p style="margin-top: 15px;"><b>Expires:</b> ${data.expires_at? new Date(data.expires_at).toLocaleDateString() : 'Never'}</p>
-    ${data.tier === 'free'? '<button onclick="showPage(\'home\')" class="btn" style="margin-top: 20px;">Upgrade to Pro</button>' : '<p style="color: #22c55e; margin-top: 20px;">✅ You are on Pro</p>'}
-  `;
+    document.getElementById('dashboard-card').innerHTML = `
+      <h3>Account Overview</h3>
+      <p><b>Email:</b> ${data.email}</p>
+      <p><b>Plan:</b> <span style="text-transform: capitalize;">${data.tier}</span> ${data.billing? `(${data.billing})` : ''}</p>
+      <p><b>API Key:</b> <code id="key">${data.apiKey}</code>
+      <button class="btn" style="padding: 6px 12px; font-size: 12px; margin-left: 10px;" onclick="navigator.clipboard.writeText(document.getElementById('key').innerText)">Copy</button></p>
+      <hr style="border-color: #333; margin: 20px 0;">
+      <p><b>Prove Usage:</b> ${data.usage.prove.toLocaleString()} / ${proveLimit}</p>
+      ${data.limits.prove!== Infinity? `<div class="usage-bar"><div class="usage-fill" style="width: ${provePercent}%"></div></div>` : ''}
+      <p style="margin-top: 15px;"><b>Verify Usage:</b> ${data.usage.verify.toLocaleString()} / ${verifyLimit}</p>
+      ${data.limits.verify!== Infinity? `<div class="usage-bar"><div class="usage-fill" style="width: ${verifyPercent}%"></div></div>` : ''}
+      <p style="margin-top: 15px;"><b>Expires:</b> ${data.expires_at? new Date(data.expires_at).toLocaleDateString() : 'Never'}</p>
+      ${data.tier === 'free'? '<button onclick="showPage(\'home\')" class="btn" style="margin-top: 20px;">Upgrade to Pro</button>' : '<p style="color: #22c55e; margin-top: 20px;">✅ You are on Pro</p>'}
+    `;
+  } catch(e) {
+    document.getElementById('dashboard-card').innerText = 'Failed to load. Check Railway logs.'
+  }
 }
 
 function renderDocs() {
