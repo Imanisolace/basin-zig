@@ -225,7 +225,7 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
     await db.query(`UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE user_id=$3`, [billing, expiresAt, userId]);
-    console.log(`Upgraded ${userId} to pro ${billing}`);
+    console.log(`Upgraded ${userId}  to pro ${billing}`);
     res.status(200).send('OK');
   } catch (e) {
     console.error('Webhook ERROR:', e);
