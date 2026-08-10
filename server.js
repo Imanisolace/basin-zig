@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { clerkMiddleware, requireAuth, getAuth } from '@clerk/express';
-import { clerkClient } from '@clerk/express'; // ADDED
+import { clerkClient } from '@clerk/express';
 import db from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -67,7 +67,7 @@ function verifyProof(leaf, proof, root, index) {
   let hash = crypto.createHash('sha256').update(leaf).digest('hex');
   for (const node of proof) {
     hash = node.position === 'left'
-? crypto.createHash('sha256').update(node.data + hash).digest('hex')
+     ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
   }
   return hash === root;
@@ -85,25 +85,38 @@ for (const tier in RATE_LIMITS) {
   });
 }
 
-async function getUser(req, res, next) {
+// CHANGE 1: NEW MIDDLEWARE FOR API KEY
+async function getUserByApiKey(req, res, next) {
   try {
-    const { userId } = getAuth(req);
-    if(!userId) return res.status(401).json({ error: 'Not authenticated' });
-    console.log("getUser: checking user_id", userId);
-    const result = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
-    if (result.rows.length === 0) {
-      console.log("getUser: No API key found");
-      return res.status(401).json({ error: 'No API key. Hit /apikey first' });
-    }
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) return res.status(401).json({ error: 'Missing x-api-key header' });
+    const result = await db.query('SELECT * FROM api_keys WHERE api_key = $1', [apiKey]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
     req.user = result.rows[0];
-    console.log("getUser: Found user", req.user.email, "tier:", req.user.tier);
     if (req.user.expires_at && new Date() >= new Date(req.user.expires_at)) {
       await db.query(`UPDATE api_keys SET tier='free', billing=NULL, expires_at=NULL WHERE id=$1`, [req.user.id]);
       req.user.tier = 'free';
     }
     next();
   } catch (e) {
-    console.error("getUser ERROR:", e);
+    console.error("getUserByApiKey ERROR:", e);
+    res.status(500).json({ error: e.message });
+  }
+}
+
+async function getUser(req, res, next) { // This is for dashboard - uses Clerk
+  try {
+    const { userId } = getAuth(req);
+    if(!userId) return res.status(401).json({ error: 'Not authenticated' });
+    const result = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
+    if (result.rows.length === 0) return res.status(401).json({ error: 'No API key. Hit /apikey first' });
+    req.user = result.rows[0];
+    if (req.user.expires_at && new Date() >= new Date(req.user.expires_at)) {
+      await db.query(`UPDATE api_keys SET tier='free', billing=NULL, expires_at=NULL WHERE id=$1`, [req.user.id]);
+      req.user.tier = 'free';
+    }
+    next();
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 }
@@ -120,7 +133,6 @@ async function autoReset(req, res, next) {
     }
     next();
   } catch (e) {
-    console.error("autoReset ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 }
@@ -144,12 +156,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.post('/apikey', requireAuth(), async (req, res) => {
   try {
     const { userId } = getAuth(req);
-    console.log("/apikey called for", userId);
-    
-    // FIX: Get email from Clerk API
     const clerkUser = await clerkClient.users.getUser(userId);
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@noemail.com`;
-    console.log("Using email:", email);
 
     const existing = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
     if (existing.rows.length > 0) {
@@ -157,15 +165,14 @@ app.post('/apikey', requireAuth(), async (req, res) => {
     }
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
     await db.query('INSERT INTO api_keys(email, api_key, user_id, last_reset) VALUES($1, $2, $3, $4)', [email, apiKey, userId, new Date()]);
-    console.log("/apikey: Created new key for", email);
     res.json({ apiKey, tier: 'free' });
   } catch (e) {
-    console.error("/apikey ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/prove', requireAuth(), getUser, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
+// CHANGE 2: USE getUserByApiKey INSTEAD OF requireAuth
+app.post('/prove', getUserByApiKey, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
   try {
     const { item } = req.body;
     const dataset = ['alice', 'bob', 'charlie', 'dave'];
@@ -177,19 +184,18 @@ app.post('/prove', requireAuth(), getUser, autoReset, dynamicRateLimit, async (r
     await db.query('UPDATE api_keys SET prove_usage = prove_usage + 1 WHERE id = $1', [req.user.id]);
     res.json({ root, proof, target_index: index, valid: true });
   } catch (e) {
-    console.error("/prove ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.post('/verify', requireAuth(), getUser, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
+// CHANGE 3: SAME HERE
+app.post('/verify', getUserByApiKey, autoReset, dynamicRateLimit, async (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
     await db.query('UPDATE api_keys SET verify_usage = verify_usage + 1 WHERE id = $1', [req.user.id]);
     res.json({ valid });
   } catch (e) {
-    console.error("/verify ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -207,7 +213,6 @@ app.get('/usage', requireAuth(), getUser, autoReset, (req, res) => {
       apiKey: req.user.api_key
     });
   } catch (e) {
-    console.error("/usage ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -225,10 +230,9 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
     await db.query(`UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE user_id=$3`, [billing, expiresAt, userId]);
-    console.log(`Upgraded ${userId}  to pro ${billing}`);
+    console.log(`Upgraded ${userId} to pro ${billing}`);
     res.status(200).send('OK');
   } catch (e) {
-    console.error('Webhook ERROR:', e);
     res.status(500).send('Server error');
   }
 });
