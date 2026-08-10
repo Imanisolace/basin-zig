@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { clerkMiddleware, requireAuth, getAuth } from '@clerk/express';
+import { clerkClient } from '@clerk/express'; // ADDED
 import db from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,7 +31,6 @@ app.use((req, res, next) => {
 
 app.use(express.static('public'));
 
-//... MERKLE TREE CODE SAME AS BEFORE...
 class MerkleTree {
   constructor(leaves) {
     this.leaves = leaves.map(x => crypto.createHash('sha256').update(x).digest('hex'));
@@ -73,7 +73,6 @@ function verifyProof(leaf, proof, root, index) {
   return hash === root;
 }
 
-// PLANS
 const LIMITS = { free: { prove: 1000, verify: 5000 }, pro: { prove: Infinity, verify: Infinity } };
 const RATE_LIMITS = { free: { windowMs: 60 * 1000, max: 10 }, pro: { windowMs: 60 * 1000, max: 1000 } };
 const limiters = {};
@@ -144,9 +143,14 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/apikey', requireAuth(), async (req, res) => {
   try {
-    const { userId, sessionClaims } = getAuth(req);
+    const { userId } = getAuth(req);
     console.log("/apikey called for", userId);
-    const email = sessionClaims.email;
+    
+    // FIX: Get email from Clerk API
+    const clerkUser = await clerkClient.users.getUser(userId);
+    const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@noemail.com`;
+    console.log("Using email:", email);
+
     const existing = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
     if (existing.rows.length > 0) {
       return res.json({ apiKey: existing.rows[0].api_key, tier: existing.rows[0].tier });
