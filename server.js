@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
-import { clerkMiddleware, requireAuth } from '@clerk/express';
+import { clerkMiddleware, requireAuth, getAuth } from '@clerk/express'; // ADDED getAuth
 import db from './db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -92,13 +92,17 @@ for (const tier in RATE_LIMITS) {
 
 async function getUser(req, res, next) {
   try {
-    console.log("getUser: checking user_id", req.auth.userId);
-    const result = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [req.auth.userId]);
+    const { userId } = getAuth(req); // FIXED: use getAuth instead of req.auth
+    if(!userId) return res.status(401).json({ error: 'Not authenticated' });
+    
+    console.log("getUser: checking user_id", userId);
+    const result = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
     if (result.rows.length === 0) {
       console.log("getUser: No API key found");
       return res.status(401).json({ error: 'No API key. Hit /apikey first' });
     }
     req.user = result.rows[0];
+    req.user.userId = userId; // save it
     console.log("getUser: Found user", req.user.email, "tier:", req.user.tier);
 
     if (req.user.expires_at && new Date() >= new Date(req.user.expires_at)) {
@@ -116,7 +120,7 @@ async function getUser(req, res, next) {
 async function autoReset(req, res, next) {
   try {
     const today = new Date();
-    const lastReset = req.user.last_reset? new Date(req.user.last_reset) : today; // FIX: handle NULL
+    const lastReset = req.user.last_reset? new Date(req.user.last_reset) : today;
     const isNewMonth = today.getMonth()!== lastReset.getMonth() || today.getFullYear()!== lastReset.getFullYear();
     if (isNewMonth) {
       console.log("autoReset: New month, resetting usage for", req.user.email);
@@ -153,17 +157,17 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.post('/apikey', requireAuth(), async (req, res) => {
   try {
-    console.log("/apikey called for", req.auth.userId);
-    const email = req.auth.sessionClaims.email;
-    const user_id = req.auth.userId;
+    const { userId, sessionClaims } = getAuth(req); // FIXED
+    console.log("/apikey called for", userId);
+    const email = sessionClaims.email;
 
-    const existing = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [user_id]);
+    const existing = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
     if (existing.rows.length > 0) {
       console.log("/apikey: Returning existing key");
       return res.json({ apiKey: existing.rows[0].api_key, tier: existing.rows[0].tier });
     }
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-    await db.query('INSERT INTO api_keys(email, api_key, user_id, last_reset) VALUES($1, $2, $3, $4)', [email, apiKey, user_id, new Date()]);
+    await db.query('INSERT INTO api_keys(email, api_key, user_id, last_reset) VALUES($1, $2, $3, $4)', [email, apiKey, userId, new Date()]);
     console.log("/apikey: Created new key for", email);
     res.json({ apiKey, tier: 'free' });
   } catch (e) {
