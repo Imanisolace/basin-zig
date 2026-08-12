@@ -267,7 +267,6 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => console.log(`Basin ZK API running on ${PORT}`)) // <-- NOW CLEAN    hash = node.position === 'left'
      ? crypto.createHash('sha256').update(node.data + hash).digest('hex')
       : crypto.createHash('sha256').update(hash + node.data).digest('hex');
-  }
   return hash === root;
 }
 
