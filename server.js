@@ -150,13 +150,15 @@ const dynamicRateLimit = (req, res, next) => {
   return limiter(req, res, next);
 };
 
-function checkLimit(req, res, next, type) {
-  const tier = req.user?.tier || 'free';
-  const limit = LIMITS[tier][type];
-  if (limit === Infinity) return next();
-  const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
-  if (used >= limit) return res.status(429).json({ error: `Monthly limit reached. Upgrade` });
-  next();
+function checkLimit(type) {
+  return (req, res, next) => {
+    const tier = req.user?.tier || 'free';
+    const limit = LIMITS[tier][type];
+    if (limit === Infinity) return next();
+    const used = type === 'prove'? req.user.prove_usage : req.user.verify_usage;
+    if (used >= limit) return res.status(429).json({ error: `Monthly limit reached. Upgrade` });
+    next();
+  }
 }
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -179,7 +181,7 @@ app.post('/apikey', requireAuth(), async (req, res) => {
   }
 });
 
-app.post('/prove', getUserByApiKey, autoReset, dynamicRateLimit, (req, res, next) => checkLimit(req, res, next, 'prove'), async (req, res) => {
+app.post('/prove', getUserByApiKey, autoReset, dynamicRateLimit, checkLimit('prove'), async (req, res) => {
   try {
     const { item } = req.body;
     const tree = new MerkleTree(DATASET);
@@ -195,7 +197,7 @@ app.post('/prove', getUserByApiKey, autoReset, dynamicRateLimit, (req, res, next
   }
 });
 
-app.post('/verify', getUserByApiKey, autoReset, dynamicRateLimit, (req, res, next) => checkLimit(req, res, next, 'verify'), async (req, res) => {
+app.post('/verify', getUserByApiKey, autoReset, dynamicRateLimit, checkLimit('verify'), async (req, res) => {
   try {
     const { root, item, target_index, proof } = req.body;
     const valid = verifyProof(item, proof, root, target_index);
