@@ -164,18 +164,24 @@ function checkLimit(type) {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+// FIXED: UPSERT so no more duplicate key errors
 app.post('/apikey', requireAuth(), async (req, res) => {
   try {
     const { userId } = getAuth(req);
     const clerkUser = await clerkClient.users.getUser(userId);
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@noemail.com`;
-    const existing = await db.query('SELECT * FROM api_keys WHERE user_id = $1', [userId]);
-    if (existing.rows.length > 0) {
-      return res.json({ apiKey: existing.rows[0].api_key, tier: existing.rows[0].tier });
-    }
+    
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-    await db.query('INSERT INTO api_keys(email, api_key, user_id, last_reset) VALUES($1, $2, $3, $4)', [email, apiKey, userId, new Date()]);
-    res.json({ apiKey, tier: 'free' });
+    
+    const result = await db.query(`
+      INSERT INTO api_keys(email, api_key, user_id, last_reset) 
+      VALUES($1, $2, $3, $4)
+      ON CONFLICT (user_id) 
+      DO UPDATE SET email = EXCLUDED.email
+      RETURNING api_key, tier
+    `, [email, apiKey, userId, new Date()]);
+    
+    res.json({ apiKey: result.rows[0].api_key, tier: result.rows[0].tier });
   } catch (e) {
     console.error("POST /apikey ERROR:", e);
     res.status(500).json({ error: e.message });
