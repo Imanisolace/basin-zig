@@ -65,11 +65,11 @@ const waitForClerk = () => new Promise(resolve => {
 async function apiFetch(url, options = {}) {
   const token = await CLERK.session.getToken();
   return fetch(url, {
-   ...options,
+  ...options,
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
-     ...options.headers
+    ...options.headers
     }
   });
 }
@@ -83,7 +83,12 @@ waitForClerk().then(async (Clerk) => {
     if (Clerk.user) {
       CURRENT_USER_ID = Clerk.user.id;
       container.innerHTML = `<button class="btn" onclick="Clerk.signOut()">Logout</button>`;
-      await apiFetch('/apikey', { method: 'POST' });
+      // Auto create key on login
+      try {
+        await apiFetch('/apikey', { method: 'POST' }); 
+      } catch(e) {
+        console.log("Key creation skipped", e)
+      }
     } else {
       CURRENT_USER_ID = null;
       container.innerHTML = `<button class="btn" onclick="Clerk.openSignIn()">Sign In</button>`;
@@ -165,7 +170,7 @@ function handleUpgrade(link) {
 
 async function createKey() {
   await apiFetch('/apikey', { method: 'POST' });
-  location.reload();
+  renderDashboard();
 }
 
 async function renderDashboard() {
