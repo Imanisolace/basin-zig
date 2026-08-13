@@ -1,77 +1,106 @@
-import express from 'express';
-import cors from 'cors';
-import crypto from 'crypto';
-import pkg from 'pg';
-const { Pool } = pkg;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Basin API Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
+    .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+    .pro { color: #22c55e; font-weight: bold; }
+    .free { color: #f59e0b; font-weight: bold; }
+    input, button { padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; width: 100%; margin-top: 8px; }
+    button { background: #6366f1; cursor: pointer; font-weight: bold; }
+    button:hover { background: #4f46e5; }
+    code { background: #0f172a; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>🔐 Basin API Dashboard</h1>
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const NP_IPN_SECRET = process.env.NP_IPN_SECRET;
+  <div class="card">
+    <h3>1. Set Your Test User</h3>
+    <p>For now we use headers. Later this will be Clerk Login.</p>
+    <input id="userId" placeholder="User ID" value="user_from_token">
+    <input id="email" placeholder="Email" value="user@email.com">
+    <button onclick="saveUser()">Save</button>
+  </div>
 
-const TREE = {
-  items: ['alice','bob','charlie','dave'],
-  root: '469f892beb5e486747efd9bb3aef67d8f384ae98bc5a3d54067f49f2518d2d8'
-};
+  <div class="card">
+    <h3>2. Your Plan</h3>
+    <p>Tier: <span id="tier" class="free">loading...</span></p>
+    <p>Prove: <span id="prove">0</span> / <span id="proveLimit">1000</span></p>
+    <p>Verify: <span id="verify">0</span> / <span id="verifyLimit">1000</span></p>
+    <button onclick="loadUsage()">Refresh</button>
+  </div>
 
-// DB connection - Railway will set DATABASE_URL
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // needed for Neon/Supabase
-});
+  <div class="card">
+    <h3>3. Get API Key</h3>
+    <button onclick="getApiKey()">Generate API Key</button>
+    <p><code id="apiKey">click button</code></p>
+  </div>
 
-const db = {
-  query: (text, params) => pool.query(text, params)
-};
+  <div class="card">
+    <h3>4. Test /prove</h3>
+    <input id="item" placeholder="Item to prove. e.g. alice">
+    <button onclick="testProve()">Run Proof</button>
+    <pre id="proveResult"></pre>
+  </div>
 
-// raw body for webhook signature check
-app.use('/webhook/nowpayments', express.raw({type: 'application/json'}));
-app.use(express.json());
-app.use(cors());
+<script>
+const API_URL = "https://basin-zig-production.up.railway.app"; // CHANGE THIS TO YOUR RAILWAY URL
 
-// ===== HELPERS =====
-async function getApiKeyForUser(userId, email) {
-  const res = await db.query('SELECT api_key FROM usage WHERE user_id = $1', [userId]);
-  if(res.rows.length > 0) return res.rows[0].api_key;
-
-  const apiKey = 'basin_sk_' + crypto.randomBytes(16).toString('hex');
-  await db.query(
-    `INSERT INTO usage(user_id, email, api_key, tier, prove_count, verify_count, prove_limit, verify_limit)
-     VALUES($1, $2, $3, 'free', 0, 0, 1000, 1000)`,
-    [userId, email, apiKey]
-  );
-  return apiKey;
-}
-
-async function requireApiKey(req, res, next) {
-  const key = req.headers['authorization']?.replace('Bearer ', '');
-  if(!key) return res.status(401).json({error: 'Missing API key'});
-  const result = await db.query('SELECT user_id FROM usage WHERE api_key = $1', [key]);
-  if(result.rows.length === 0) return res.status(401).json({error: 'Invalid API key'});
-  req.userId = result.rows[0].user_id;
-  next();
-}
-
-async function trackUsage(userId, type) {
-  const col = type === 'prove'? 'prove_count' : 'verify_count';
-  await db.query(`UPDATE usage SET ${col} = ${col} + 1 WHERE user_id = $1`, [userId]);
-}
-
-async function checkLimit(type) {
-  return async (req, res, next) => {
-    const result = await db.query('SELECT * FROM usage WHERE user_id = $1', [req.userId]);
-    const u = result.rows[0];
-    const count = type === 'prove'? u.prove_count : u.verify_count;
-    const limit = type === 'prove'? u.prove_limit : u.verify_limit;
-    if(count >= limit) return res.status(429).json({error: 'Limit reached. Upgrade to Pro'});
-    next();
+function getHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "x-user-id": localStorage.getItem('userId') || 'user_from_token',
+    "x-email": localStorage.getItem('email') || 'user@email.com',
+    "Authorization": "Bearer " + (localStorage.getItem('apiKey') || '')
   }
 }
 
-// ===== HEALTH =====
-app.get('/health', (req,res) => res.json({status: 'ok'}));
+function saveUser() {
+  localStorage.setItem('userId', document.getElementById('userId').value);
+  localStorage.setItem('email', document.getElementById('email').value);
+  alert('Saved! Now click Refresh');
+  loadUsage();
+}
 
-// ===== AUTH: GET API KEY =====
-app.post('/apikey', async (req,res) => {
+async function loadUsage() {
+  const res = await fetch(API_URL + "/usage", { headers: getHeaders() });
+  const data = await res.json();
+  if(data.error) return alert(data.error);
+  
+  document.getElementById("tier").innerText = data.tier;
+  document.getElementById("tier").className = data.tier;
+  document.getElementById("prove").innerText = data.usage.prove;
+  document.getElementById("verify").innerText = data.usage.verify;
+  document.getElementById("proveLimit").innerText = data.limits.prove;
+  document.getElementById("verifyLimit").innerText = data.limits.verify;
+}
+
+async function getApiKey() {
+  const res = await fetch(API_URL + "/apikey", { method: 'POST', headers: getHeaders() });
+  const data = await res.json();
+  localStorage.setItem('apiKey', data.apiKey);
+  document.getElementById("apiKey").innerText = data.apiKey;
+}
+
+async function testProve() {
+  const item = document.getElementById('item').value;
+  const res = await fetch(API_URL + "/prove", { 
+    method: 'POST', 
+    headers: getHeaders(),
+    body: JSON.stringify({ item })
+  });
+  const data = await res.json();
+  document.getElementById("proveResult").innerText = JSON.stringify(data, null, 2);
+  loadUsage(); // refresh counts
+}
+
+loadUsage(); // load on page open
+</script>
+</body>
+</html>app.post('/apikey', async (req,res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '');
   if(!token) return res.status(401).json({error: 'Missing Clerk token'});
