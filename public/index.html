@@ -2,71 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Basin API Dashboard</title>
+  <script async crossorigin="anonymous" data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
-    .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
-    .pro { color: #22c55e; font-weight: bold; }
+    body { font-family: Inter, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
+    .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
+    .pro { color: #22c55e; font-weight: bold; } 
     .free { color: #f59e0b; font-weight: bold; }
-    input, button { padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; width: 100%; margin-top: 8px; }
-    button { background: #6366f1; cursor: pointer; font-weight: bold; }
+    input, button { padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; width: 100%; margin-top: 8px; box-sizing: border-box; }
+    button { background: #6366f1; cursor: pointer; font-weight: bold; border: none; } 
     button:hover { background: #4f46e5; }
-    code { background: #0f172a; padding: 2px 6px; border-radius: 4px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    code { background: #0f172a; padding: 8px; border-radius: 4px; word-break: break-all; display: block; margin-top: 8px; }
+    pre { background: #0f172a; padding: 12px; border-radius: 8px; overflow-x: auto; }
+    #user-button { float: right; }
+    h1, h3 { margin-top: 0; }
   </style>
 </head>
 <body>
+  <div id="user-button"></div>
   <h1>🔐 Basin API Dashboard</h1>
 
-  <div class="card">
-    <h3>1. Set Your Test User</h3>
-    <p>For now we use headers. Later this will be Clerk Login.</p>
-    <input id="userId" placeholder="User ID" value="user_from_token">
-    <input id="email" placeholder="Email" value="user@email.com">
-    <button onclick="saveUser()">Save</button>
-  </div>
+  <div id="loading" class="card"><p>Loading Clerk...</p></div>
 
-  <div class="card">
-    <h3>2. Your Plan</h3>
-    <p>Tier: <span id="tier" class="free">loading...</span></p>
-    <p>Prove: <span id="prove">0</span> / <span id="proveLimit">1000</span></p>
-    <p>Verify: <span id="verify">0</span> / <span id="verifyLimit">1000</span></p>
-    <button onclick="loadUsage()">Refresh</button>
-  </div>
+  <div id="app" style="display:none;">
+    <div class="card">
+      <h3>Your Plan</h3>
+      <p>Tier: <span id="tier" class="free">free</span></p>
+      <p>Prove: <span id="prove">0</span> / <span id="proveLimit">1000</span></p>
+      <p>Verify: <span id="verify">0</span> / <span id="verifyLimit">5000</span></p>
+      <p>Expires: <span id="expires">Never</span></p>
+      <button onclick="loadUsage()">Refresh</button>
+    </div>
 
-  <div class="card">
-    <h3>3. Get API Key</h3>
-    <button onclick="getApiKey()">Generate API Key</button>
-    <p><code id="apiKey">click button</code></p>
-  </div>
+    <div class="card">
+      <h3>Your API Key</h3>
+      <p>Use this in the <code>x-api-key</code> header</p>
+      <button onclick="getApiKey()">Generate / Show API Key</button>
+      <code id="apiKey">Click button to generate</code>
+    </div>
 
-  <div class="card">
-    <h3>4. Test /prove</h3>
-    <input id="item" placeholder="Item to prove. e.g. alice">
-    <button onclick="testProve()">Run Proof</button>
-    <pre id="proveResult"></pre>
+    <div class="card">
+      <h3>Test /prove</h3>
+      <input id="item" placeholder="Item to prove. e.g. alice, bob, charlie">
+      <button onclick="testProve()">Run Proof</button>
+      <pre id="proveResult">Result will show here...</pre>
+    </div>
   </div>
 
 <script>
-const API_URL = "https://basin-zig-production.up.railway.app"; // CHANGE THIS TO YOUR RAILWAY URL
+const API_URL = ""; // Same domain because Railway serves this
 
-function getHeaders() {
-  return {
-    "Content-Type": "application/json",
-    "x-user-id": localStorage.getItem('userId') || 'user_from_token',
-    "x-email": localStorage.getItem('email') || 'user@email.com',
-    "Authorization": "Bearer " + (localStorage.getItem('apiKey') || '')
+window.addEventListener('load', async () => {
+  await Clerk.load();
+  document.getElementById('loading').style.display = 'none';
+
+  if (!Clerk.user) {
+    document.getElementById('app').innerHTML = '<div class="card"><h3>Please Sign In</h3><div id="sign-in"></div></div>';
+    Clerk.mountSignIn(document.getElementById('sign-in'));
+    return;
   }
-}
 
-function saveUser() {
-  localStorage.setItem('userId', document.getElementById('userId').value);
-  localStorage.setItem('email', document.getElementById('email').value);
-  alert('Saved! Now click Refresh');
+  document.getElementById('app').style.display = 'block';
+  Clerk.mountUserButton(document.getElementById('user-button'));
   loadUsage();
+});
+
+async function getToken() {
+  return await Clerk.session.getToken();
 }
 
 async function loadUsage() {
-  const res = await fetch(API_URL + "/usage", { headers: getHeaders() });
+  const token = await getToken();
+  const res = await fetch(API_URL + "/usage", { 
+    headers: { "Authorization": `Bearer ${token}` } 
+  });
   const data = await res.json();
   if(data.error) return alert(data.error);
   
@@ -74,123 +85,39 @@ async function loadUsage() {
   document.getElementById("tier").className = data.tier;
   document.getElementById("prove").innerText = data.usage.prove;
   document.getElementById("verify").innerText = data.usage.verify;
-  document.getElementById("proveLimit").innerText = data.limits.prove;
-  document.getElementById("verifyLimit").innerText = data.limits.verify;
+  document.getElementById("proveLimit").innerText = data.limits.prove === Infinity ? '∞' : data.limits.prove;
+  document.getElementById("verifyLimit").innerText = data.limits.verify === Infinity ? '∞' : data.limits.verify;
+  document.getElementById("expires").innerText = data.expires_at ? new Date(data.expires_at).toLocaleDateString() : 'Never';
+  if(data.apiKey) document.getElementById("apiKey").innerText = data.apiKey;
 }
 
 async function getApiKey() {
-  const res = await fetch(API_URL + "/apikey", { method: 'POST', headers: getHeaders() });
+  const token = await getToken();
+  const res = await fetch(API_URL + "/apikey", { method: 'POST', headers: { "Authorization": `Bearer ${token}` } });
   const data = await res.json();
-  localStorage.setItem('apiKey', data.apiKey);
+  if(data.error) return alert(data.error);
   document.getElementById("apiKey").innerText = data.apiKey;
 }
 
 async function testProve() {
+  const apiKey = document.getElementById("apiKey").innerText;
+  if(apiKey === 'Click button to generate') return alert('Generate API Key first');
+  
   const item = document.getElementById('item').value;
+  if(!item) return alert('Enter an item');
+
   const res = await fetch(API_URL + "/prove", { 
     method: 'POST', 
-    headers: getHeaders(),
+    headers: { 
+      "Content-Type": "application/json",
+      "x-api-key": apiKey
+    },
     body: JSON.stringify({ item })
   });
   const data = await res.json();
   document.getElementById("proveResult").innerText = JSON.stringify(data, null, 2);
   loadUsage(); // refresh counts
 }
-
-loadUsage(); // load on page open
 </script>
 </body>
-</html>app.post('/apikey', async (req,res) => {
-  const auth = req.headers.authorization || '';
-  const token = auth.replace('Bearer ', '');
-  if(!token) return res.status(401).json({error: 'Missing Clerk token'});
-
-  // TEMP FOR TESTING: use headers instead of real clerk
-  const userId = req.headers['x-user-id'] || 'user_from_token';
-  const email = req.headers['x-email'] || 'user@email.com';
-
-  const apiKey = await getApiKeyForUser(userId, email);
-  res.json({apiKey});
-});
-
-// ===== PROVE =====
-app.post('/prove', requireApiKey, await checkLimit('prove'), async (req,res) => {
-  const { item } = req.body;
-  const idx = TREE.items.indexOf(item);
-  if(idx === -1) return res.status(404).json({error: 'Item not found'});
-  const proof = [{position: 'right', data: '81b637d8fcd2c6da6359e6963113a1170de795e4b725b84d1e0b4cfd9ec58ce9'}];
-  await trackUsage(req.userId, 'prove');
-  res.json({root: TREE.root, proof, target_index: idx, valid: true});
-});
-
-// ===== VERIFY =====
-app.post('/verify', requireApiKey, await checkLimit('verify'), async (req,res) => {
-  const { root, item, target_index, proof } = req.body;
-  if(!root ||!item || target_index === undefined ||!proof) {
-    return res.status(400).json({error: 'Missing fields'});
-  }
-  const valid = root === TREE.root && TREE.items[target_index] === item;
-  await trackUsage(req.userId, 'verify');
-  res.json({valid});
-});
-
-// ===== USAGE =====
-app.get('/usage', async (req,res) => {
-  // TEMP FOR TESTING: use headers instead of real clerk
-  const userId = req.headers['x-user-id'] || 'user_from_token';
-  const result = await db.query('SELECT * FROM usage WHERE user_id = $1', [userId]);
-  if(result.rows.length === 0) return res.status(404).json({error: 'No usage found. Hit /apikey first'});
-  const u = result.rows[0];
-  res.json({
-    email: u.email,
-    tier: u.tier,
-    apiKey: u.api_key,
-    usage: {prove: u.prove_count, verify: u.verify_count},
-    limits: {prove: u.prove_limit, verify: u.verify_limit}, // FIXED
-    expires_at: u.expires_at
-  });
-});
-
-// ===== NOWPAYMENTS WEBHOOK =====
-app.post('/webhook/nowpayments', async (req,res) => {
-  const signature = req.headers['x-nowpayments-sig'];
-  const rawBody = req.body.toString();
-  const expectedSig = crypto.createHmac('sha512', NP_IPN_SECRET).update(rawBody).digest('hex');
-  if(signature!== expectedSig) {
-    console.log('Invalid NP signature');
-    return res.status(403).send('Forbidden');
-  }
-  const { payment_status, order_id } = JSON.parse(rawBody);
-  if(payment_status === 'finished') {
-    await db.query(
-      `UPDATE usage SET tier = 'pro', prove_limit = 999999, verify_limit = 999999, expires_at = NOW() + interval '30 days' WHERE user_id = $1`,
-      [order_id]
-    );
-    console.log(`✅ Upgraded ${order_id} to PRO`);
-  }
-  res.sendStatus(200);
-});
-
-app.listen(PORT, () => console.log(`Basin API running on ${PORT}`));});
-
-// ===== NOWPAYMENTS WEBHOOK =====
-app.post('/webhook/nowpayments', async (req,res) => { 
-  const signature = req.headers['x-nowpayments-sig']; 
-  const rawBody = req.body.toString(); 
-  const expectedSig = crypto.createHmac('sha512', NP_IPN_SECRET).update(rawBody).digest('hex');
-  if(signature!== expectedSig) { 
-    console.log('Invalid NP signature'); 
-    return res.status(403).send('Forbidden'); 
-  } 
-  const { payment_status, order_id } = JSON.parse(rawBody);
-  if(payment_status === 'finished') { 
-    await db.query(
-      `UPDATE usage SET tier = 'pro', "limit" = 999999, expires_at = NOW() + interval '30 days' WHERE user_id = $1`, 
-      [order_id] 
-    ); 
-    console.log(`✅ Upgraded ${order_id} to PRO`); 
-  }
-  res.sendStatus(200); 
-});
-
-app.listen(PORT, () => console.log(`Basin API running on ${PORT}`));
+</html>
