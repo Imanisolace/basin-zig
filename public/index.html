@@ -4,7 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Basin API Dashboard</title>
-  <script async crossorigin="anonymous" data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"></script>
+  <script async crossorigin="anonymous" 
+    data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" 
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    onload="console.log('Clerk loaded')"
+    onerror="alert('Clerk failed to load. Check domain in Clerk Dashboard')">
+  </script>
   <style>
     body { font-family: Inter, Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #0f172a; color: #e2e8f0; }
     .card { background: #1e293b; padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
@@ -13,11 +18,9 @@
     input, button { padding: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; width: 100%; margin-top: 8px; box-sizing: border-box; }
     button { background: #6366f1; cursor: pointer; font-weight: bold; border: none; } 
     button:hover { background: #4f46e5; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
     code { background: #0f172a; padding: 8px; border-radius: 4px; word-break: break-all; display: block; margin-top: 8px; }
     pre { background: #0f172a; padding: 12px; border-radius: 8px; overflow-x: auto; }
     #user-button { float: right; }
-    h1, h3 { margin-top: 0; }
   </style>
 </head>
 <body>
@@ -38,23 +41,19 @@
 
     <div class="card">
       <h3>Your API Key</h3>
-      <p>Use this in the <code>x-api-key</code> header</p>
       <button onclick="getApiKey()">Generate / Show API Key</button>
       <code id="apiKey">Click button to generate</code>
-    </div>
-
-    <div class="card">
-      <h3>Test /prove</h3>
-      <input id="item" placeholder="Item to prove. e.g. alice, bob, charlie">
-      <button onclick="testProve()">Run Proof</button>
-      <pre id="proveResult">Result will show here...</pre>
     </div>
   </div>
 
 <script>
-const API_URL = ""; // Same domain because Railway serves this
+const API_URL = "";
 
 window.addEventListener('load', async () => {
+  if (!window.Clerk) {
+    document.getElementById('loading').innerHTML = '<p style="color:red">Clerk failed to load. Add *.up.railway.app to Clerk > Domains</p>';
+    return;
+  }
   await Clerk.load();
   document.getElementById('loading').style.display = 'none';
 
@@ -69,18 +68,11 @@ window.addEventListener('load', async () => {
   loadUsage();
 });
 
-async function getToken() {
-  return await Clerk.session.getToken();
-}
-
+async function getToken() { return await Clerk.session.getToken(); }
 async function loadUsage() {
   const token = await getToken();
-  const res = await fetch(API_URL + "/usage", { 
-    headers: { "Authorization": `Bearer ${token}` } 
-  });
+  const res = await fetch(API_URL + "/usage", { headers: { "Authorization": `Bearer ${token}` } });
   const data = await res.json();
-  if(data.error) return alert(data.error);
-  
   document.getElementById("tier").innerText = data.tier;
   document.getElementById("tier").className = data.tier;
   document.getElementById("prove").innerText = data.usage.prove;
@@ -90,33 +82,11 @@ async function loadUsage() {
   document.getElementById("expires").innerText = data.expires_at ? new Date(data.expires_at).toLocaleDateString() : 'Never';
   if(data.apiKey) document.getElementById("apiKey").innerText = data.apiKey;
 }
-
 async function getApiKey() {
   const token = await getToken();
   const res = await fetch(API_URL + "/apikey", { method: 'POST', headers: { "Authorization": `Bearer ${token}` } });
   const data = await res.json();
-  if(data.error) return alert(data.error);
   document.getElementById("apiKey").innerText = data.apiKey;
-}
-
-async function testProve() {
-  const apiKey = document.getElementById("apiKey").innerText;
-  if(apiKey === 'Click button to generate') return alert('Generate API Key first');
-  
-  const item = document.getElementById('item').value;
-  if(!item) return alert('Enter an item');
-
-  const res = await fetch(API_URL + "/prove", { 
-    method: 'POST', 
-    headers: { 
-      "Content-Type": "application/json",
-      "x-api-key": apiKey
-    },
-    body: JSON.stringify({ item })
-  });
-  const data = await res.json();
-  document.getElementById("proveResult").innerText = JSON.stringify(data, null, 2);
-  loadUsage(); // refresh counts
 }
 </script>
 </body>
