@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import { db } from './db.js';
-import { getApiKeyForUser, requireApiKey, trackUsage, checkLimit } from './usage.js';
+import pkg from 'pg';
+const { Pool } = pkg;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,10 +13,59 @@ const TREE = {
   root: '469f892beb5e486747efd9bb3aef67d8f384ae98bc5a3d54067f49f2518d2d8'
 };
 
+// DB connection - Railway will set DATABASE_URL
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false } // needed for Neon/Supabase
+});
+
+const db = {
+  query: (text, params) => pool.query(text, params)
+};
+
 // raw body for webhook signature check
 app.use('/webhook/nowpayments', express.raw({type: 'application/json'}));
 app.use(express.json());
 app.use(cors());
+
+// ===== HELPERS =====
+async function getApiKeyForUser(userId, email) {
+  const res = await db.query('SELECT api_key FROM usage WHERE user_id = $1', [userId]);
+  if(res.rows.length > 0) return res.rows[0].api_key;
+
+  const apiKey = 'basin_sk_' + crypto.randomBytes(16).toString('hex');
+  await db.query(
+    `INSERT INTO usage(user_id, email, api_key, tier, prove_count, verify_count, prove_limit, verify_limit)
+     VALUES($1, $2, $3, 'free', 0, 0, 1000, 1000)`,
+    [userId, email, apiKey]
+  );
+  return apiKey;
+}
+
+async function requireApiKey(req, res, next) {
+  const key = req.headers['authorization']?.replace('Bearer ', '');
+  if(!key) return res.status(401).json({error: 'Missing API key'});
+  const result = await db.query('SELECT user_id FROM usage WHERE api_key = $1', [key]);
+  if(result.rows.length === 0) return res.status(401).json({error: 'Invalid API key'});
+  req.userId = result.rows[0].user_id;
+  next();
+}
+
+async function trackUsage(userId, type) {
+  const col = type === 'prove'? 'prove_count' : 'verify_count';
+  await db.query(`UPDATE usage SET ${col} = ${col} + 1 WHERE user_id = $1`, [userId]);
+}
+
+async function checkLimit(type) {
+  return async (req, res, next) => {
+    const result = await db.query('SELECT * FROM usage WHERE user_id = $1', [req.userId]);
+    const u = result.rows[0];
+    const count = type === 'prove'? u.prove_count : u.verify_count;
+    const limit = type === 'prove'? u.prove_limit : u.verify_limit;
+    if(count >= limit) return res.status(429).json({error: 'Limit reached. Upgrade to Pro'});
+    next();
+  }
+}
 
 // ===== HEALTH =====
 app.get('/health', (req,res) => res.json({status: 'ok'}));
@@ -26,16 +75,17 @@ app.post('/apikey', async (req,res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '');
   if(!token) return res.status(401).json({error: 'Missing Clerk token'});
-  
-  // verify token with clerk here... simplified
-  const userId = 'user_from_token'; // replace with real clerk verify
-  const email = 'user@email.com';
+
+  // TEMP FOR TESTING: use headers instead of real clerk
+  const userId = req.headers['x-user-id'] || 'user_from_token';
+  const email = req.headers['x-email'] || 'user@email.com';
+
   const apiKey = await getApiKeyForUser(userId, email);
   res.json({apiKey});
 });
 
 // ===== PROVE =====
-app.post('/prove', requireApiKey, checkLimit('prove'), async (req,res) => {
+app.post('/prove', requireApiKey, await checkLimit('prove'), async (req,res) => {
   const { item } = req.body;
   const idx = TREE.items.indexOf(item);
   if(idx === -1) return res.status(404).json({error: 'Item not found'});
@@ -45,7 +95,7 @@ app.post('/prove', requireApiKey, checkLimit('prove'), async (req,res) => {
 });
 
 // ===== VERIFY =====
-app.post('/verify', requireApiKey, checkLimit('verify'), async (req,res) => {
+app.post('/verify', requireApiKey, await checkLimit('verify'), async (req,res) => {
   const { root, item, target_index, proof } = req.body;
   if(!root ||!item || target_index === undefined ||!proof) {
     return res.status(400).json({error: 'Missing fields'});
@@ -56,22 +106,43 @@ app.post('/verify', requireApiKey, checkLimit('verify'), async (req,res) => {
 });
 
 // ===== USAGE =====
-app.get('/usage', async (req,res) => { 
-  const auth = req.headers.authorization || ''; 
-  const token = auth.replace('Bearer ', ''); 
-  const userId = 'user_from_token'; // replace with real clerk verify
+app.get('/usage', async (req,res) => {
+  // TEMP FOR TESTING: use headers instead of real clerk
+  const userId = req.headers['x-user-id'] || 'user_from_token';
   const result = await db.query('SELECT * FROM usage WHERE user_id = $1', [userId]);
-  if(result.rows.length === 0) return res.status(404).json({error: 'No usage found. Hit /apikey first'}); 
-  const u = result.rows[0]; 
-  res.json({ 
+  if(result.rows.length === 0) return res.status(404).json({error: 'No usage found. Hit /apikey first'});
+  const u = result.rows[0];
+  res.json({
     email: u.email,
-    tier: u.tier, 
-    apiKey: u.api_key, 
-    usage: {prove: u.prove_count, verify: u.verify_count}, 
-    limits: {prove: u.limit, verify: u.limit}, // fixed
-    expires_at: u.expires_at 
-  }); 
+    tier: u.tier,
+    apiKey: u.api_key,
+    usage: {prove: u.prove_count, verify: u.verify_count},
+    limits: {prove: u.prove_limit, verify: u.verify_limit}, // FIXED
+    expires_at: u.expires_at
+  });
 });
+
+// ===== NOWPAYMENTS WEBHOOK =====
+app.post('/webhook/nowpayments', async (req,res) => {
+  const signature = req.headers['x-nowpayments-sig'];
+  const rawBody = req.body.toString();
+  const expectedSig = crypto.createHmac('sha512', NP_IPN_SECRET).update(rawBody).digest('hex');
+  if(signature!== expectedSig) {
+    console.log('Invalid NP signature');
+    return res.status(403).send('Forbidden');
+  }
+  const { payment_status, order_id } = JSON.parse(rawBody);
+  if(payment_status === 'finished') {
+    await db.query(
+      `UPDATE usage SET tier = 'pro', prove_limit = 999999, verify_limit = 999999, expires_at = NOW() + interval '30 days' WHERE user_id = $1`,
+      [order_id]
+    );
+    console.log(`✅ Upgraded ${order_id} to PRO`);
+  }
+  res.sendStatus(200);
+});
+
+app.listen(PORT, () => console.log(`Basin API running on ${PORT}`));});
 
 // ===== NOWPAYMENTS WEBHOOK =====
 app.post('/webhook/nowpayments', async (req,res) => { 
