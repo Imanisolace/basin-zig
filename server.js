@@ -213,7 +213,7 @@ app.post('/create-payment', requireAuth(), async (req, res) => {
       body: JSON.stringify({
         price_amount: amount,
         price_currency: "usd",
-        pay_currency: null,
+        pay_currency: "",
         order_id: orderId,
         order_description: `Basin Pro ${plan}`,
         ipn_callback_url: "https://basin-zig-production.up.railway.app/webhook/nowpayments",
