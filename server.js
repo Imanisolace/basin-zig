@@ -191,7 +191,7 @@ app.post('/apikey', requireAuth(), async (req, res) => {
   }
 });
 
-// NEW: CREATE NOWPAYMENTS PAYMENT
+// FIXED: USE /v1/invoice + NO pay_currency = any coin allowed
 app.post('/create-payment', requireAuth(), async (req, res) => {
   try {
     const { userId } = getAuth(req);
@@ -204,7 +204,7 @@ app.post('/create-payment', requireAuth(), async (req, res) => {
     const amount = plan === 'yearly'? 260 : 28;
     const orderId = `${userId}_${Date.now()}`; // UNIQUE EVERY TIME
 
-    const paymentRes = await fetch('https://api.nowpayments.io/v1/payment', {
+    const paymentRes = await fetch('https://api.nowpayments.io/v1/invoice', { // CHANGE 1: invoice not payment
       method: 'POST',
       headers: {
         'x-api-key': NP_API_KEY,
@@ -213,7 +213,7 @@ app.post('/create-payment', requireAuth(), async (req, res) => {
       body: JSON.stringify({
         price_amount: amount,
         price_currency: "usd",
-        pay_currency: "",
+        // CHANGE 2: pay_currency REMOVED COMPLETELY
         order_id: orderId,
         order_description: `Basin Pro ${plan}`,
         ipn_callback_url: "https://basin-zig-production.up.railway.app/webhook/nowpayments",
