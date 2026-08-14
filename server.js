@@ -13,7 +13,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const NP_IPN_SECRET = process.env.NP_IPN_SECRET;
+const NP_API_KEY = process.env.NOWPAYMENTS_API_KEY;
+
 if (!NP_IPN_SECRET) throw new Error('NP_IPN_SECRET not set in Railway Variables');
+if (!NP_API_KEY) throw new Error('NOWPAYMENTS_API_KEY not set in Railway Variables');
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -170,20 +173,60 @@ app.post('/apikey', requireAuth(), async (req, res) => {
     const { userId } = getAuth(req);
     const clerkUser = await clerkClient.users.getUser(userId);
     const email = clerkUser.emailAddresses[0]?.emailAddress || `${userId}@noemail.com`;
-    
+
     const apiKey = 'zk_' + crypto.randomBytes(16).toString('hex');
-    
+
     const result = await db.query(`
-      INSERT INTO api_keys(email, api_key, user_id, last_reset) 
+      INSERT INTO api_keys(email, api_key, user_id, last_reset)
       VALUES($1, $2, $3, $4)
-      ON CONFLICT (user_id) 
+      ON CONFLICT (user_id)
       DO UPDATE SET email = EXCLUDED.email
       RETURNING api_key, tier
     `, [email, apiKey, userId, new Date()]);
-    
+
     res.json({ apiKey: result.rows[0].api_key, tier: result.rows[0].tier });
   } catch (e) {
     console.error("POST /apikey ERROR:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// NEW: CREATE NOWPAYMENTS PAYMENT
+app.post('/create-payment', requireAuth(), async (req, res) => {
+  try {
+    const { userId } = getAuth(req);
+    const { plan } = req.body; // 'monthly' or 'yearly'
+
+    if (!['monthly', 'yearly'].includes(plan)) {
+      return res.status(400).json({ error: 'plan must be monthly or yearly' });
+    }
+
+    const amount = plan === 'yearly'? 260 : 28;
+    const orderId = `${userId}_${Date.now()}`; // UNIQUE EVERY TIME
+
+    const paymentRes = await fetch('https://api.nowpayments.io/v1/payment', {
+      method: 'POST',
+      headers: {
+        'x-api-key': NP_API_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        price_amount: amount,
+        price_currency: "usd",
+        order_id: orderId,
+        order_description: `Basin Pro ${plan}`,
+        ipn_callback_url: "https://basin-zig-production.up.railway.app/webhook/nowpayments",
+        success_url: "https://basin-zig-production.up.railway.app/dashboard",
+        cancel_url: "https://basin-zig-production.up.railway.app/dashboard"
+      })
+    });
+
+    const paymentData = await paymentRes.json();
+    if (!paymentData.invoice_url) throw new Error(paymentData.message || 'Failed to create payment');
+
+    res.json({ payment_url: paymentData.invoice_url });
+  } catch (e) {
+    console.error("POST /create-payment ERROR:", e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -234,6 +277,7 @@ app.get('/usage', requireAuth(), getUser, autoReset, (req, res) => {
   }
 });
 
+// FIXED WEBHOOK
 app.post('/webhook/nowpayments', express.json(), async (req, res) => {
   try {
     const data = req.body;
@@ -241,11 +285,13 @@ app.post('/webhook/nowpayments', express.json(), async (req, res) => {
     const sign = crypto.createHmac('sha512', NP_IPN_SECRET).update(JSON.stringify(data)).digest('hex');
     if (signature!== sign) return res.status(400).send('Invalid signature');
     if (data.payment_status!== 'finished') return res.status(200).send('Not finished');
-    const userId = data.order_id;
-    let billing = data.iid === '4328033905'? 'yearly' : 'monthly';
+
+    const userId = data.order_id.split('_')[0]; // extract user_id from "user_xxx_timestamp"
+    let billing = data.price_amount == 260? 'yearly' : 'monthly'; // detect by price
     let days = billing === 'yearly'? 365 : 30;
     const expiresAt = new Date();
     expiresAt.setUTCDate(expiresAt.getUTCDate() + days);
+
     await db.query(`UPDATE api_keys SET tier='pro', billing=$1, expires_at=$2 WHERE user_id=$3`, [billing, expiresAt, userId]);
     console.log(`Upgraded ${userId} to pro ${billing}`);
     res.status(200).send('OK');
