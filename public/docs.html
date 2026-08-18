@@ -1,32 +1,38 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><title>Basin Docs</title>
-<style>body { font-family: monospace; background: #0a0a0a; color: #fff; padding: 40px; } pre { background: #111; padding: 15px; border-radius: 5px; overflow-x: auto; }</style>
+<meta charset="UTF-8"><title>Basin API Docs | Tamper-Proof Ledger Engine</title>
+<style>body { font-family: monospace; background: #0a0a0a; color: #fff; padding: 40px; } pre { background: #111; padding: 15px; border-radius: 5px; overflow-x: auto; color: #a9ffb4; } code { color: #ff9d00; }</style>
 </head>
 <body>
-<h1>Basin ZK API Docs</h1>
+<h1>Basin API Documentation</h1>
+<p>Basin is an ultra-fast, edge-optimized data integrity engine. Secure your application logs, financial entries, and database states with mathematically unalterable audit trails.</p>
+
 <p>Base URL: <code>https://basin-zig-production.up.railway.app</code></p>
 <p>Auth: Send <code>x-api-key</code> header</p>
 
-<h2>1. Get API Key</h2>
+<h2>1. Get Your Free API Key</h2>
+<p>Initialize an account and get a secure access token instantly.</p>
 <pre>POST /apikey
 { "email": "you@email.com", "user_id": "clerk_123" }</pre>
 
-<h2>2. Generate Proof</h2>
+<h2>2. Commit Data to the Immutable Ledger</h2>
+<p>Append a data entry to your secure timeline. Basin hashes the entry into a cryptographically sealed state structure and returns an integrity receipt.</p>
 <pre>curl -X POST https://basin-zig-production.up.railway.app/prove \
 -H "x-api-key: zk_YOUR_KEY" \
 -H "Content-Type: application/json" \
--d '{"item":"alice"}'</pre>
+-d '{"item":"transaction_or_log_payload"}'</pre>
 <p>Response: <code>{ root, proof, target_index, valid }</code></p>
 
-<h2>3. Verify Proof</h2>
+<h2>3. Verify Data Authenticity (Audit Check)</h2>
+<p>Instantly confirm that a specific log or database entry has never been altered, deleted, or tampered with by checking it against the global integrity root.</p>
 <pre>curl -X POST https://basin-zig-production.up.railway.app/verify \
 -H "x-api-key: zk_YOUR_KEY" \
 -H "Content-Type: application/json" \
--d '{ "root": "...", "item": "alice", "target_index": 0, "proof": [...] }'</pre>
+-d '{ "root": "...", "item": "transaction_or_log_payload", "target_index": 0, "proof": [...] }'</pre>
 
-<h2>4. Check Usage</h2>
+<h2>4. Check API Usage & Metrics</h2>
+<p>Monitor your active throughput and ledger consumption metrics.</p>
 <pre>curl https://basin-zig-production.up.railway.app/usage \
 -H "x-api-key: zk_YOUR_KEY"</pre>
 
