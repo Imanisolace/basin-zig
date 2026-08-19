@@ -16,17 +16,12 @@ let memory = null;
 async function initWasm() {
   if (wasmInstance) return;
   const { instance } = await WebAssembly.instantiate(wasmBuffer, {
-    env: { memory: new WebAssembly.Memory({ initial: 256 }) }
+    // Bumped from 256 pages (16MB) — the new leaf buffer + arena need
+    // more headroom now that leaves aren't capped at 32 bytes each.
+    env: { memory: new WebAssembly.Memory({ initial: 512 }) }
   });
   wasmInstance = instance;
   memory = instance.exports.memory;
-}
-
-function stringToBytes(str) {
-  const bytes = encoder.encode(str);
-  const out = new Uint8Array(OUTPUT_SIZE);
-  out.set(bytes.slice(0, OUTPUT_SIZE));
-  return out;
 }
 
 if (parentPort) {
@@ -34,54 +29,88 @@ if (parentPort) {
     try {
       await initWasm();
       const {
-        set_leaf_byte, api_compute_root, api_generate_proof, api_verify_proof,
-        get_root_ptr, get_proof_len, get_proof_step_side, get_proof_step_sibling_ptr
+        reset_leaves, begin_leaf, get_leaf_write_ptr,
+        api_compute_root, api_generate_proof,
+        get_root_ptr, get_proof_len, get_proof_step_side,
+        get_proof_step_has_sibling, get_proof_step_sibling_ptr,
+        verify_leaf_capacity, get_verify_leaf_ptr, get_verify_root_ptr,
+        get_verify_siblings_ptr, get_verify_is_right_ptr,
+        get_verify_has_sibling_ptr, api_verify_proof
       } = wasmInstance.exports;
 
       let result;
       if (type === 'prove') {
+        reset_leaves();
+
         for (let i = 0; i < items.length; i++) {
-          const bytes = stringToBytes(items[i]);
-          for (let b = 0; b < OUTPUT_SIZE; b++) set_leaf_byte(i, b, bytes[b]);
+          const bytes = encoder.encode(items[i]); // real length, no truncation or padding
+          const idx = begin_leaf(bytes.length);
+          if (idx < 0) throw new Error(`begin_leaf failed for item ${i} (out of leaf slots or buffer space)`);
+
+          const ptr = get_leaf_write_ptr(idx);
+          const mem = new Uint8Array(memory.buffer);
+          mem.set(bytes, ptr);
         }
-        if (api_compute_root(items.length) === 0) throw new Error("api_compute_root failed");
-        if (api_generate_proof(items.length, target_index) === 0) throw new Error("api_generate_proof failed");
+
+        if (api_compute_root() === 0) throw new Error("api_compute_root failed");
+        if (api_generate_proof(target_index) === 0) throw new Error("api_generate_proof failed");
 
         const buf = new Uint8Array(memory.buffer);
         const rootHash = Buffer.from(buf.slice(get_root_ptr(), get_root_ptr() + OUTPUT_SIZE)).toString('hex');
         const steps = [];
         for (let i = 0; i < get_proof_len(); i++) {
+          const hasSibling = get_proof_step_has_sibling(i) === 1;
           steps.push({
             is_right: get_proof_step_side(i) === 1,
-            sibling: Buffer.from(buf.slice(get_proof_step_sibling_ptr(i), get_proof_step_sibling_ptr(i) + OUTPUT_SIZE)).toString('hex')
+            has_sibling: hasSibling,
+            sibling: hasSibling
+              ? Buffer.from(buf.slice(get_proof_step_sibling_ptr(i), get_proof_step_sibling_ptr(i) + OUTPUT_SIZE)).toString('hex')
+              : null
           });
         }
         result = { root: "0x" + rootHash, proof: { steps } };
       }
 
       else if (type === 'verify') {
-        const mem = new Uint8Array(memory.buffer);
-        const leaf_ptr = 0;
-        const root_ptr = OUTPUT_SIZE;
-        const siblings_ptr = OUTPUT_SIZE * 2;
-        const flags_ptr = siblings_ptr + OUTPUT_SIZE * proof.steps.length;
+        if (!proof.steps || proof.steps.length === 0 || proof.steps.length > 32) {
+          throw new Error("invalid proof length");
+        }
 
-        // clear
-        mem.fill(0, 0, flags_ptr + proof.steps.length);
+        const leafBytes = encoder.encode(item);
+        const capacity = verify_leaf_capacity();
+        if (leafBytes.length > capacity) {
+          throw new Error(`leaf too large to verify (${leafBytes.length} bytes, max ${capacity})`);
+        }
 
-        // write leaf
-        mem.set(stringToBytes(item), leaf_ptr);
-        // write root
-        mem.set(Buffer.from(root.replace('0x',''), 'hex'), root_ptr);
-        // write siblings + flags
+        const leafPtr = get_verify_leaf_ptr(leafBytes.length);
+        let mem = new Uint8Array(memory.buffer);
+        mem.set(leafBytes, leafPtr);
+
+        // memory.buffer may have been detached/resized by the call above
+        // on some runtimes — re-view before further writes to be safe.
+        mem = new Uint8Array(memory.buffer);
+        mem.set(Buffer.from(root.replace('0x', ''), 'hex'), get_verify_root_ptr());
+
+        const siblingsPtr = get_verify_siblings_ptr();
+        const isRightPtr = get_verify_is_right_ptr();
+        const hasSiblingPtr = get_verify_has_sibling_ptr();
+
         proof.steps.forEach((step, i) => {
-          mem.set(Buffer.from(step.sibling.replace('0x',''), 'hex'), siblings_ptr + i * OUTPUT_SIZE);
-          mem[flags_ptr + i] = step.is_right? 1 : 0;
+          if (step.has_sibling) {
+            mem.set(Buffer.from(step.sibling.replace('0x', ''), 'hex'), siblingsPtr + i * OUTPUT_SIZE);
+          }
+          mem[isRightPtr + i] = step.is_right ? 1 : 0;
+          mem[hasSiblingPtr + i] = step.has_sibling ? 1 : 0;
         });
 
-        const verified = api_verify_proof(leaf_ptr, root_ptr, proof.steps.length, siblings_ptr, flags_ptr);
+        const verified = api_verify_proof(proof.steps.length);
         result = { valid: verified === 1 };
       }
+
+      else {
+        throw new Error(`unknown message type: ${type}`);
+      }
+
       parentPort.postMessage({ id, result });
     } catch (err) {
       parentPort.postMessage({ id, error: err.message });
