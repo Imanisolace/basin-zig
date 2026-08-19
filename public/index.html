@@ -211,22 +211,31 @@ async function renderDashboard() {
     
     document.getElementById('dashboard-card').innerHTML = `
       <h3>Your API Key</h3>
-      <code>${data.api_key || 'No key generated'}</code>
+      <p><code>${data.apiKey || 'No key generated'}</code></p>
       <h3>Usage Stats</h3>
-      <p>Writes: ${data.usage.prove} / ${proveLimit}</p>
-      <p>Verifications: ${data.usage.verify} / ${verifyLimit}</p>
+      <p>Writes (Prove): ${data.usage.prove.toLocaleString()} / ${proveLimit}</p>
+      <p>Verification: ${data.usage.verify.toLocaleString()} / ${verifyLimit}</p>
     `;
   } catch(e) {
-    document.getElementById('dashboard-card').innerHTML = `Failed to load usage metrics.`;
+    document.getElementById('dashboard-card').innerHTML = `Error loading dashboard details.`;
   }
 }
 
 function renderDocs() {
-  app.innerHTML = `<h2>Documentation</h2><div class="card"><p>Please check your docs.html route or view endpoint info directly.</p></div>`;
+  app.innerHTML = `<div class="card"><h2>Documentation Redirect</h2><p>Please access documentation directly through the dedicated file route.</p><a href="/docs.html" class="btn">Go to Docs</a></div>`;
 }
-function renderTerms() { app.innerHTML = `<h2>Terms of Service</h2><div class="card"><p>Standard terms apply.</p></div>`; }
-function renderPrivacy() { app.innerHTML = `<h2>Privacy Policy</h2><div class="card"><p>Your data is kept private and secure.</p></div>`; }
-function renderRefund() { app.innerHTML = `<h2>Refund Policy</h2><div class="card"><p>Contact support for issues.</p></div>`; }
+
+function renderTerms() {
+  app.innerHTML = `<div class="card legal"><h2>Terms of Service</h2><p>Standard terms of usage apply.</p></div>`;
+}
+
+function renderPrivacy() {
+  app.innerHTML = `<div class="card legal"><h2>Privacy Policy</h2><p>Data tracking records are localized and encrypted.</p></div>`;
+}
+
+function renderRefund() {
+  app.innerHTML = `<div class="card legal"><h2>Refund Policy</h2><p>14-day standard subscription cancellation policies apply.</p></div>`;
+}
 </script>
 </body>
 </html>
