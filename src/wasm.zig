@@ -5,54 +5,99 @@ const merkle = @import("merkle.zig");
 pub const OUTPUT_SIZE = basin.OUTPUT_SIZE;
 pub const MAX_DEPTH = 32;
 pub const MAX_LEAVES = 10000;
+pub const MAX_LEAF_DATA = 1024 * 1024 * 8; // 8MB packed buffer for all leaf bytes combined
+pub const MAX_VERIFY_LEAF = 65536; // cap on a single leaf being verified
 
-var global_leaf_buffer: [MAX_LEAVES][OUTPUT_SIZE]u8 = undefined;
+// --- Leaf storage: flat buffer + offset/length table, not fixed slots ---
+var global_leaf_data: [MAX_LEAF_DATA]u8 = undefined;
+var global_leaf_offset: [MAX_LEAVES]usize = undefined;
+var global_leaf_len: [MAX_LEAVES]usize = undefined;
+var global_leaf_count: usize = 0;
+var global_write_cursor: usize = 0;
+
 var global_root_output: [OUTPUT_SIZE]u8 = undefined;
 
-// has_sibling distinguishes a real pairing from a carried-up odd node —
-// the WASM ABI needs this explicit flag since it has no `null`.
+// has_sibling distinguishes a real pairing from a carried-up odd node.
 const ProofStepWasm = struct {
     has_sibling: bool,
     is_right: bool,
     sibling: [OUTPUT_SIZE]u8,
 };
-
 var global_proof_len: usize = 0;
 var global_proof_steps: [MAX_DEPTH]ProofStepWasm = undefined;
 
-// Module-level, not a per-call stack array — a 700KB+ local array on
-// every export call risked overflowing WASM's (often small) stack.
-var arena_buf: [1024 * 900]u8 = undefined;
+// --- Verify scratch: leaf here is variable length too ---
+var global_verify_leaf: [MAX_VERIFY_LEAF]u8 = undefined;
+var global_verify_leaf_len: usize = 0;
+var global_verify_root: [OUTPUT_SIZE]u8 = undefined;
+var global_verify_siblings: [MAX_DEPTH][OUTPUT_SIZE]u8 = undefined;
+var global_verify_is_right: [MAX_DEPTH]u8 = undefined;
+var global_verify_has_sibling: [MAX_DEPTH]u8 = undefined;
 
-export fn set_leaf_byte(leaf_idx: usize, byte_idx: usize, value: u8) void {
-    if (leaf_idx < MAX_LEAVES and byte_idx < OUTPUT_SIZE) {
-        global_leaf_buffer[leaf_idx][byte_idx] = value;
-    }
+// Working arena for tree construction. NOTE: FixedBufferAllocator only
+// reclaims a free() if it's the most recent allocation (LIFO). buildMerkleRoot
+// frees each level right after allocating the next one, so frees don't
+// actually reclaim space here — size this for the SUM of every level's
+// allocations, not just the largest one. ~640KB covers 10,000 leaves;
+// this is the number to grow if MAX_LEAVES ever increases.
+var arena_buf: [1024 * 1536]u8 = undefined;
+
+/// Clear all loaded leaves. Call before loading a new leaf set.
+export fn reset_leaves() void {
+    global_leaf_count = 0;
+    global_write_cursor = 0;
 }
 
-fn leafSlices(count: usize, allocator: std.mem.Allocator) ![]const []const u8 {
-    const slices = try allocator.alloc([]const u8, count);
-    for (0..count) |i| slices[i] = &global_leaf_buffer[i];
+/// Reserve space for a leaf of `len` bytes. Returns its index (0-based,
+/// assigned in call order) or -1 if there's no room. Call once per leaf,
+/// in order, then write the leaf's bytes via get_leaf_write_ptr().
+export fn begin_leaf(len: usize) i32 {
+    if (global_leaf_count >= MAX_LEAVES) return -1;
+    if (global_write_cursor + len > MAX_LEAF_DATA) return -1;
+
+    const idx = global_leaf_count;
+    global_leaf_offset[idx] = global_write_cursor;
+    global_leaf_len[idx] = len;
+    global_write_cursor += len;
+    global_leaf_count += 1;
+    return @intCast(idx);
+}
+
+/// Pointer to write `len` bytes into for leaf `idx` (same `len` passed
+/// to begin_leaf for that index).
+export fn get_leaf_write_ptr(idx: usize) [*]u8 {
+    return global_leaf_data[global_leaf_offset[idx]..].ptr;
+}
+
+fn leafSlices(allocator: std.mem.Allocator) ![]const []const u8 {
+    const slices = try allocator.alloc([]const u8, global_leaf_count);
+    for (0..global_leaf_count) |i| {
+        const off = global_leaf_offset[i];
+        const len = global_leaf_len[i];
+        slices[i] = global_leaf_data[off..][0..len];
+    }
     return slices;
 }
 
-export fn api_compute_root(count: usize) u32 {
-    if (count == 0 or count > MAX_LEAVES) return 0;
+/// Compute the Merkle root from the currently loaded leaves.
+export fn api_compute_root() u32 {
+    if (global_leaf_count == 0) return 0;
     var fba = std.heap.FixedBufferAllocator.init(&arena_buf);
     const allocator = fba.allocator();
 
-    const leaves = leafSlices(count, allocator) catch return 0;
+    const leaves = leafSlices(allocator) catch return 0;
     const root = merkle.buildMerkleRoot(leaves, allocator) catch return 0;
     @memcpy(&global_root_output, root);
     return 1;
 }
 
-export fn api_generate_proof(count: usize, leaf_index: usize) u32 {
-    if (count == 0 or count > MAX_LEAVES or leaf_index >= count) return 0;
+/// Generate a Merkle proof for the leaf at `leaf_index`.
+export fn api_generate_proof(leaf_index: usize) u32 {
+    if (global_leaf_count == 0 or leaf_index >= global_leaf_count) return 0;
     var fba = std.heap.FixedBufferAllocator.init(&arena_buf);
     const allocator = fba.allocator();
 
-    const leaves = leafSlices(count, allocator) catch return 0;
+    const leaves = leafSlices(allocator) catch return 0;
     const proof = merkle.generateProof(leaves, leaf_index, allocator) catch return 0;
     if (proof.len > MAX_DEPTH) return 0;
 
@@ -67,32 +112,38 @@ export fn api_generate_proof(count: usize, leaf_index: usize) u32 {
     return 1;
 }
 
-export fn api_verify_proof(
-    leaf_ptr: [*]const u8,
-    root_ptr: [*]const u8,
-    proof_len: usize,
-    siblings_ptr: [*]const u8,
-    is_right_ptr: [*]const u8,
-    has_sibling_ptr: [*]const u8, // new — required to reconstruct carry-up steps correctly
-) u32 {
+/// Max size of a single leaf that can be verified. JS should check
+/// against this before calling get_verify_leaf_ptr.
+export fn verify_leaf_capacity() usize { return MAX_VERIFY_LEAF; }
+
+/// Reserve space to write the leaf being verified. Caller must have
+/// already checked len <= verify_leaf_capacity().
+export fn get_verify_leaf_ptr(len: usize) [*]u8 {
+    global_verify_leaf_len = @min(len, MAX_VERIFY_LEAF);
+    return &global_verify_leaf;
+}
+
+export fn get_verify_root_ptr() [*]u8 { return &global_verify_root; }
+export fn get_verify_siblings_ptr() [*]u8 { return @ptrCast(&global_verify_siblings); }
+export fn get_verify_is_right_ptr() [*]u8 { return &global_verify_is_right; }
+export fn get_verify_has_sibling_ptr() [*]u8 { return &global_verify_has_sibling; }
+
+export fn api_verify_proof(proof_len: usize) u32 {
     if (proof_len == 0 or proof_len > MAX_DEPTH) return 0;
+    if (global_verify_leaf_len == 0) return 0;
     var fba = std.heap.FixedBufferAllocator.init(&arena_buf);
     const allocator = fba.allocator();
 
     const steps = allocator.alloc(merkle.ProofStep, proof_len) catch return 0;
     for (0..proof_len) |i| {
-        var sib: [OUTPUT_SIZE]u8 = undefined;
-        @memcpy(&sib, siblings_ptr[i * OUTPUT_SIZE ..][0..OUTPUT_SIZE]);
         steps[i] = .{
-            .sibling = if (has_sibling_ptr[i] != 0) sib else null,
-            .is_right = is_right_ptr[i] != 0,
+            .sibling = if (global_verify_has_sibling[i] != 0) global_verify_siblings[i] else null,
+            .is_right = global_verify_is_right[i] != 0,
         };
     }
 
-    var root: [OUTPUT_SIZE]u8 = undefined;
-    @memcpy(&root, root_ptr[0..OUTPUT_SIZE]);
-
-    const ok = merkle.verifyProof(leaf_ptr[0..OUTPUT_SIZE], steps, root, allocator) catch return 0;
+    const leaf = global_verify_leaf[0..global_verify_leaf_len];
+    const ok = merkle.verifyProof(leaf, steps, global_verify_root, allocator) catch return 0;
     return if (ok) 1 else 0;
 }
 
