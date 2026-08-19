@@ -1,16 +1,17 @@
 const std = @import("std");
-const poseidon = @import("poseidon.zig");
+const consts = @import("poseidon_consts.zig");
+const Fr = @import("fr.zig").Fr;
 
-pub const BLOCK_SIZE = 16;
-pub const OUTPUT_SIZE = 32;
+pub const BLOCK_SIZE = 64; // 2 field elements absorbed per block (rate = 2)
+pub const OUTPUT_SIZE = 32; // one field element squeezed out
 
 pub const BasinError = error{
     EmptyInput,
 };
 
 pub const Hasher = struct {
-    state: [3]u64 = .{ 0, 0, 0 },
-    buffer: [BLOCK_SIZE]u8 align(8) = .{0} ** BLOCK_SIZE,
+    state: [3]Fr = .{ Fr.zero, Fr.zero, Fr.zero },
+    buffer: [BLOCK_SIZE]u8 = .{0} ** BLOCK_SIZE,
     buf_len: usize = 0,
 
     pub fn init() Hasher {
@@ -18,12 +19,15 @@ pub const Hasher = struct {
     }
 
     fn absorbBlock(self: *Hasher) void {
-        const block = std.mem.bytesAsSlice(u64, &self.buffer);
+        var a_bytes: [32]u8 = undefined;
+        var b_bytes: [32]u8 = undefined;
+        @memcpy(&a_bytes, self.buffer[0..32]);
+        @memcpy(&b_bytes, self.buffer[32..64]);
 
-        self.state[0] = poseidon.add(self.state[0], block[0]);
-        self.state[1] = poseidon.add(self.state[1], block[1]);
+        self.state[0] = self.state[0].add(Fr.fromBytes(a_bytes));
+        self.state[1] = self.state[1].add(Fr.fromBytes(b_bytes));
 
-        poseidon.permute(&self.state);
+        self.state = consts.poseidon_perm(self.state);
         self.buf_len = 0;
         @memset(&self.buffer, 0);
     }
@@ -42,17 +46,10 @@ pub const Hasher = struct {
     pub fn final(self: *Hasher, out: *[OUTPUT_SIZE]u8) void {
         self.buffer[self.buf_len] = 0x01;
         self.buf_len += 1;
-
         @memset(self.buffer[self.buf_len..], 0);
         self.absorbBlock();
 
-        std.mem.writeInt(u64, out[0..8], self.state[0], .little);
-        std.mem.writeInt(u64, out[8..16], self.state[1], .little);
-
-        poseidon.permute(&self.state);
-
-        std.mem.writeInt(u64, out[16..24], self.state[0], .little);
-        std.mem.writeInt(u64, out[24..32], self.state[1], .little);
+        out.* = self.state[0].toBytes();
     }
 };
 
@@ -62,18 +59,14 @@ pub fn poseidonHash(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     var h = Hasher.init();
     h.update(input);
 
-    const out = try allocator.alloc(u8, OUTPUT_SIZE);
-    errdefer allocator.free(out);
+    var out_arr: [OUTPUT_SIZE]u8 = undefined;
+    h.final(&out_arr);
 
-    h.final(out[0..OUTPUT_SIZE]);
+    const out = try allocator.alloc(u8, OUTPUT_SIZE);
+    @memcpy(out, &out_arr);
     return out;
 }
 
-// FIXED: Replaced non-existent variant with proper allocPrint string format logic
 pub fn toHex(input: []const u8, allocator: std.mem.Allocator) ![]u8 {
     return std.fmt.allocPrint(allocator, "{}", .{std.fmt.fmtSliceHexLower(input)});
-}
-
-pub fn hash3(a: u64, b: u64, c: u64) u64 {
-    return poseidon.hash3(a, b, c);
 }
