@@ -4,8 +4,9 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
+    "build": "zig build -Doptimize=ReleaseFast",
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node --watch server.js"
   },
   "dependencies": {
     "@clerk/express": "^1.2.2",
