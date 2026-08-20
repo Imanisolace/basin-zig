@@ -5,11 +5,11 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/basin.zig"),
     });
 
-    // freestanding, not wasi: worker.js only supplies an `env` import
-    // object (memory) at instantiation — no wasi_snapshot_preview1.
-    // A wasi-targeted build risks a LinkError at runtime the moment any
-    // std function pulls in a WASI import, even if today's code paths
-    // happen not to trigger one.
+    const merkle_mod = b.addModule("merkle", .{
+        .root_source_file = b.path("src/merkle.zig"),
+    });
+    merkle_mod.addImport("basin", basin_mod); // merkle.zig itself imports "basin"
+
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
         .os_tag = .freestanding,
@@ -22,17 +22,15 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseSmall,
     });
     wasm.root_module.addImport("basin", basin_mod);
+    wasm.root_module.addImport("merkle", merkle_mod);
 
-    wasm.rdynamic = true;   // required so `export fn` symbols are visible to JS
+    wasm.rdynamic = true;
     wasm.root_module.strip = false;
-    wasm.entry = .disabled; // freestanding + disabled entry: no _start, no WASI runtime expected
+    wasm.entry = .disabled;
 
     const install_wasm = b.addInstallArtifact(wasm, .{});
     b.getInstallStep().dependOn(&install_wasm.step);
 
-    // worker.js expects basin.wasm sitting next to it in src/, not
-    // inside zig-out/bin/ where addInstallArtifact places it by default.
-    // Copy the built artifact to the exact path worker.js reads from.
     const copy_wasm = b.addInstallFileWithDir(
         wasm.getEmittedBin(),
         .{ .custom = "../src" },
@@ -41,6 +39,25 @@ pub fn build(b: *std.Build) void {
     copy_wasm.step.dependOn(&install_wasm.step);
     b.getInstallStep().dependOn(&copy_wasm.step);
 
-    const test_step = b.step("test", "Build wasm for CI");
-    test_step.dependOn(b.getInstallStep());
+    const test_target = b.standardTargetOptions(.{});
+
+    const build_config_mod = b.createModule(.{
+        .root_source_file = b.addWriteFiles().add(
+            "build_config.zig",
+            "pub const skip_heavy = false;\n",
+        ),
+    });
+
+    const tests = b.addTest(.{
+        .root_source_file = b.path("tests/run.zig"),
+        .target = test_target,
+        .optimize = .Debug,
+    });
+    tests.root_module.addImport("basin", basin_mod);
+    tests.root_module.addImport("merkle", merkle_mod);
+    tests.root_module.addImport("build_config", build_config_mod);
+
+    const run_tests = b.addRunArtifact(tests);
+    const test_step = b.step("test", "Run the test suite");
+    test_step.dependOn(&run_tests.step);
 }
