@@ -4,7 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Basin - Immutable Ledger API</title>
-<script async crossorigin="anonymous" data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" src="https://jsdelivr.net"></script>
+<!-- FIXED: src was "https://jsdelivr.net" (bare homepage, serves nothing).
+     Clerk's loader must come from your own Clerk instance's CDN domain,
+     decoded from your publishable key below. VERIFY this exact URL
+     against your Clerk dashboard's "Add to your site" snippet before
+     deploying — reconstructed from Clerk's documented pattern, not
+     copied from your dashboard directly. -->
+<script async crossorigin="anonymous" data-clerk-publishable-key="pk_test_c2F2aW5nLXNvbGUtOTguY2xlcmsuYWNjb3VudHMuZGV2JA" src="https://saving-sole-98.clerk.accounts.dev/npm/@clerk/clerk-js@latest/dist/clerk.browser.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #ddd; margin: 0; padding: 0; line-height: 1.6; }
   .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
