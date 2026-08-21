@@ -1,6 +1,6 @@
 const std = @import("std");
-const consts = @import("poseidon_consts.zig");
-const Fr = @import("fr.zig").Fr;
+const consts = @import("poseidon_consts");
+const Fr = @import("fr").Fr;
 
 pub const BLOCK_SIZE = 64; // 2 field elements absorbed per block (rate = 2)
 pub const OUTPUT_SIZE = 32; // one field element squeezed out
