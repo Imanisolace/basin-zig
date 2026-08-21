@@ -1,14 +1,26 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const fr_mod = b.addModule("fr", .{
+        .root_source_file = b.path("src/fr.zig"),
+    });
+
+    const poseidon_consts_mod = b.addModule("poseidon_consts", .{
+        .root_source_file = b.path("src/poseidon_consts.zig"),
+    });
+    poseidon_consts_mod.addImport("fr", fr_mod); // poseidon_consts.zig needs Fr too
+
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
     });
+    basin_mod.addImport("fr", fr_mod);
+    basin_mod.addImport("poseidon_consts", poseidon_consts_mod);
 
     const merkle_mod = b.addModule("merkle", .{
         .root_source_file = b.path("src/merkle.zig"),
     });
-    merkle_mod.addImport("basin", basin_mod); // merkle.zig itself imports "basin"
+    merkle_mod.addImport("basin", basin_mod);
+    merkle_mod.addImport("fr", fr_mod);
 
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
@@ -55,6 +67,8 @@ pub fn build(b: *std.Build) void {
     });
     tests.root_module.addImport("basin", basin_mod);
     tests.root_module.addImport("merkle", merkle_mod);
+    tests.root_module.addImport("fr", fr_mod);
+    tests.root_module.addImport("poseidon_consts", poseidon_consts_mod);
     tests.root_module.addImport("build_config", build_config_mod);
 
     const run_tests = b.addRunArtifact(tests);
