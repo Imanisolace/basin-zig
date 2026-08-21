@@ -1,14 +1,19 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    const bigzig_mod = b.addModule("bigzig", .{
+        .root_source_file = b.path("vendor/bigzig/src/bigzig.zig"),
+    });
+
     const fr_mod = b.addModule("fr", .{
         .root_source_file = b.path("src/fr.zig"),
     });
+    fr_mod.addImport("bigzig", bigzig_mod);
 
     const poseidon_consts_mod = b.addModule("poseidon_consts", .{
         .root_source_file = b.path("src/poseidon_consts.zig"),
     });
-    poseidon_consts_mod.addImport("fr", fr_mod); // poseidon_consts.zig needs Fr too
+    poseidon_consts_mod.addImport("fr", fr_mod);
 
     const basin_mod = b.addModule("basin", .{
         .root_source_file = b.path("src/basin.zig"),
