@@ -92,8 +92,8 @@ hex("0x1300bdee08bb7824ca20fb80118075f40219b6151d55b5c52b624a7cdeddf6a7"),hex("0
 pub const P: [T][T]Fr =.{
   .{
         hex("0x109b7f411ba0e4c9b2b70caf5c36a7b194be7c11ad24378bfedb68592ba8118b"),
-        hex("0x16ed41e13bb9c0c66ae119424fddbc9314dc9fdbdeea55d6c64543dc4903e0"),
-        hex("0x2b90bba00fca0589f617e7dcbfe2e0df706ab40ceb247b791a93b74e36736d")
+        hex("0x0016ed41e13bb9c0c66ae119424fddbc9314dc9fdbdeea55d6c64543dc4903e0"),
+        hex("0x002b90bba00fca0589f617e7dcbfe2e0df706ab40ceb247b791a93b74e36736d")
     },
   .{
         hex("0x2969f27eed31a480b9c36c764379dbca2cc8fdd1415c3dded62940bcde0bd771"),
