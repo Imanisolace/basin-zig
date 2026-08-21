@@ -1,5 +1,5 @@
 const std = @import("std");
-const Fr = @import("fr.zig").Fr;
+const Fr = @import("fr").Fr;
 
 pub const T: usize = 3;
 pub const RF: usize = 8;
