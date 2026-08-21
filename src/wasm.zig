@@ -1,6 +1,6 @@
 const std = @import("std");
-const basin = @import("basin.zig");
-const merkle = @import("merkle.zig");
+const basin = @import("basin");
+const merkle = @import("merkle");
 
 pub const OUTPUT_SIZE = basin.OUTPUT_SIZE;
 pub const MAX_DEPTH = 32;
