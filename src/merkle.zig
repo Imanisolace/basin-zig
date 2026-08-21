@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const Fr = @import("fr.zig").Fr;
+pub const Fr = @import("fr").Fr;
 const basin = @import("basin");
 
 // Domain tags prevent a leaf hash from ever colliding with an internal
