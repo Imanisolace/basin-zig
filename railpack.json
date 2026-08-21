@@ -1,0 +1,6 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "packages": {
+    "zig": "0.14.0"
+  }
+}
