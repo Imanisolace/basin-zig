@@ -9,8 +9,7 @@ const __dirname = path.dirname(__filename);
 const OUTPUT_SIZE = 32;
 const encoder = new TextEncoder();
 
-// Load the WASM that zig build produces (src/basin.wasm)
-const wasmBuffer = fs.readFileSync(path.join(__dirname, 'src', 'basin.wasm'));
+const wasmBuffer = fs.readFileSync(path.join(__dirname, 'basin.wasm'));
 let wasmInstance = null;
 let memory = null;
 
