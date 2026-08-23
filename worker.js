@@ -9,7 +9,12 @@ const __dirname = path.dirname(__filename);
 const OUTPUT_SIZE = 32;
 const encoder = new TextEncoder();
 
-const wasmBuffer = fs.readFileSync(path.join(__dirname, 'basin.wasm'));
+// Confirmed via a build-log filesystem search: build.zig's install step
+// places the real, freshly-compiled artifact at src/basin.wasm relative
+// to the repo root — not at the root alongside worker.js. A stale,
+// manually-committed basin.wasm previously sat at the root and masked
+// this mismatch entirely; it's been deleted from the repo.
+const wasmBuffer = fs.readFileSync(path.join(__dirname, 'src', 'basin.wasm'));
 let wasmInstance = null;
 let memory = null;
 
