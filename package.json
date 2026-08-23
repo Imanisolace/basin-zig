@@ -4,7 +4,7 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "build": "zig build",
+    "build": "zig build && echo '--- basin.wasm locations ---' && find / -name 'basin.wasm' 2>/dev/null",
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
