@@ -8,7 +8,7 @@ pub const MAX_LEAVES = 10000;
 pub const MAX_LEAF_DATA = 1024 * 1024 * 8; // 8MB packed buffer for all leaf bytes combined
 pub const MAX_VERIFY_LEAF = 65536; // cap on a single leaf being verified
 
-// --- Leaf storage: flat buffer + offset/length table, not fixed slots ---
+// Leaf storage
 var global_leaf_data: [MAX_LEAF_DATA]u8 = undefined;
 var global_leaf_offset: [MAX_LEAVES]usize = undefined;
 var global_leaf_len: [MAX_LEAVES]usize = undefined;
@@ -34,10 +34,8 @@ var global_verify_siblings: [MAX_DEPTH][OUTPUT_SIZE]u8 = undefined;
 var global_verify_is_right: [MAX_DEPTH]u8 = undefined;
 var global_verify_has_sibling: [MAX_DEPTH]u8 = undefined;
 
-// Working arena for tree construction. 
+// Arena for tree construction. 
 var arena_buf: [1024 * 1536]u8 = undefined;
-
-/// Clear all loaded leaves. Call before loading a new leaf set.
 export fn reset_leaves() void {
     global_leaf_count = 0;
     global_write_cursor = 0;
