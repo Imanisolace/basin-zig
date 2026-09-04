@@ -3,7 +3,6 @@ pub const Fr = @import("fr").Fr;
 const basin = @import("basin");
 
 // Domain tags prevent a leaf hash from ever colliding with an internal
-// node hash, and prevent ambiguity about what a given hash represents.
 const LEAF_TAG: u8 = 0x00;
 const NODE_TAG: u8 = 0x01;
 
@@ -35,8 +34,6 @@ fn hashPair(a: Fr, b: Fr, allocator: std.mem.Allocator) !Fr {
     return Fr.fromBytes(arr);
 }
 
-// Combine one level into the next. An odd trailing node is carried up
-// UNCHANGED (not duplicated) so the root stays uniquely determined by
 // the leaf set — no two different leaf sets can produce the same root.
 fn nextLevel(current: []const Fr, allocator: std.mem.Allocator) ![]Fr {
     const len = current.len;
@@ -77,7 +74,6 @@ pub fn buildMerkleRoot(leaves: []const []const u8, allocator: std.mem.Allocator)
 
 // A proof step is either a real sibling to hash with (side matters),
 // or `null`, meaning this level had no sibling and the node carried
-// up unchanged. The verifier needs to replay both cases.
 pub const ProofStep = struct {
     sibling: ?[32]u8,
     is_right: bool, // true if sibling is the right-hand node
