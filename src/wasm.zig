@@ -26,7 +26,7 @@ const ProofStepWasm = struct {
 var global_proof_len: usize = 0;
 var global_proof_steps: [MAX_DEPTH]ProofStepWasm = undefined;
 
-// --- Verify scratch: leaf here is variable length too ---
+//Verify scratch
 var global_verify_leaf: [MAX_VERIFY_LEAF]u8 = undefined;
 var global_verify_leaf_len: usize = 0;
 var global_verify_root: [OUTPUT_SIZE]u8 = undefined;
