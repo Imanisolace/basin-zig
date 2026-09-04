@@ -40,10 +40,7 @@ pub const Fr = struct {
         }
     }
 
-    // bigzig's Int(u256).mul wraps mod 2^256 internally (`*%`), which
-    // silently discards the high bits of any product that exceeds 256
-    // bits — and for BN254-sized operands, most products do. Widen to
-    // u512 ourselves before reducing, so nothing is lost before the
+    
     // mod-P step.
     pub fn mul(self: Fr, other: Fr) Fr {
         const a: u512 = self.v.to(u256);
