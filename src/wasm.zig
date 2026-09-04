@@ -34,12 +34,7 @@ var global_verify_siblings: [MAX_DEPTH][OUTPUT_SIZE]u8 = undefined;
 var global_verify_is_right: [MAX_DEPTH]u8 = undefined;
 var global_verify_has_sibling: [MAX_DEPTH]u8 = undefined;
 
-// Working arena for tree construction. NOTE: FixedBufferAllocator only
-// reclaims a free() if it's the most recent allocation (LIFO). buildMerkleRoot
-// frees each level right after allocating the next one, so frees don't
-// actually reclaim space here — size this for the SUM of every level's
-// allocations, not just the largest one. ~640KB covers 10,000 leaves;
-// this is the number to grow if MAX_LEAVES ever increases.
+// Working arena for tree construction. 
 var arena_buf: [1024 * 1536]u8 = undefined;
 
 /// Clear all loaded leaves. Call before loading a new leaf set.
