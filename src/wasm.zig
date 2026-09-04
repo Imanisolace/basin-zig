@@ -41,9 +41,6 @@ export fn reset_leaves() void {
     global_write_cursor = 0;
 }
 
-/// Reserve space for a leaf of `len` bytes. Returns its index (0-based,
-/// assigned in call order) or -1 if there's no room. Call once per leaf,
-/// in order, then write the leaf's bytes via get_leaf_write_ptr().
 export fn begin_leaf(len: usize) i32 {
     if (global_leaf_count >= MAX_LEAVES) return -1;
     if (global_write_cursor + len > MAX_LEAF_DATA) return -1;
@@ -56,8 +53,6 @@ export fn begin_leaf(len: usize) i32 {
     return @intCast(idx);
 }
 
-/// Pointer to write `len` bytes into for leaf `idx` (same `len` passed
-/// to begin_leaf for that index).
 export fn get_leaf_write_ptr(idx: usize) [*]u8 {
     return global_leaf_data[global_leaf_offset[idx]..].ptr;
 }
@@ -105,8 +100,7 @@ export fn api_generate_proof(leaf_index: usize) u32 {
     return 1;
 }
 
-/// Max size of a single leaf that can be verified. JS should check
-/// against this before calling get_verify_leaf_ptr.
+/// Max size of a single leaf that can be verified.
 export fn verify_leaf_capacity() usize { return MAX_VERIFY_LEAF; }
 
 /// Reserve space to write the leaf being verified. Caller must have
