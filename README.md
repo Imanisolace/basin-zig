@@ -7,7 +7,7 @@
 Basin is a high-performance API for generating and verifying Merkle proofs.  
 Built with Zig (compiled to WebAssembly) and Node.js, it is designed for cases where common JavaScript libraries become too slow or memory-heavy — especially with larger leaf sets or when Poseidon hashing is required.
 
----
+
 
 ## Why Basin?
 
@@ -19,7 +19,7 @@ Most popular Merkle libraries (merkletreejs, OpenZeppelin, etc.) work well for s
 
 Basin solves these problems with a simple HTTP API.
 
----
+
 
 ## Features
 
